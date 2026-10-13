@@ -259,7 +259,7 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.3</span></h1>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.4</span></h1>
   <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗可改歌名／歌手（在原字上改）再重試。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -337,7 +337,7 @@
     <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」。會下載進媒體庫，並掛上<strong>目前播放清單</strong>（取代「音檔遺失」那一列），不必再一首一首點。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.3。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.4。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -1192,7 +1192,9 @@ async function sendOneElitesand(song) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: song.youtubeUrl,
-        pin: elitesandPinInput.value.trim()
+        pin: elitesandPinInput.value.trim(),
+        title: song.title,
+        artist: song.artist || ""
       })
     });
   } catch (error) {

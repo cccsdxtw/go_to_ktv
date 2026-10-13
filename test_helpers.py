@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.6.3")
+        self.assertEqual(server.APP_VERSION, "0.6.4")
 
 
 class FakeResponse:
@@ -309,14 +309,19 @@ class ElitesandProxyTests(unittest.TestCase):
         ), mock.patch.object(server, "elitesand_attach_to_playlist", return_value=True) as attach, mock.patch.object(
             server.urllib.request, "urlopen", side_effect=fake_urlopen
         ):
-            result = server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E", "1234")
+            result = server.elitesand_import_youtube(
+                "https://youtu.be/lOL3CEton6E", "1234", "Lydia", "F.I.R"
+            )
         self.assertFalse(result["skipped"])
         self.assertTrue(result["playlistOk"])
         self.assertEqual(result["filename"], "song.mp3")
+        self.assertEqual(result["title"], "Lydia")
         attach.assert_called_once()
         sent_track = attach.call_args.args[1]
         self.assertEqual(sent_track["id"], "abc")
         self.assertEqual(sent_track["filename"], "song.mp3")
+        self.assertEqual(sent_track["title"], "Lydia")
+        self.assertEqual(sent_track["artist"], "F.I.R")
         self.assertEqual(captured["url"], "http://127.0.0.1:3000/api/youtube")
         self.assertEqual(captured["method"], "POST")
         self.assertEqual(captured["body"]["url"], "https://www.youtube.com/watch?v=lOL3CEton6E")
@@ -399,6 +404,21 @@ class PlaylistAttachTests(unittest.TestCase):
         track = server.track_for_playlist({"title": "雨愛", "filename": "a.mp3"}, "abc12345678", "https://www.youtube.com/watch?v=abc12345678")
         self.assertEqual(track["id"], "abc12345678")
         self.assertEqual(track["source"], "youtube")
+        self.assertEqual(track["title"], "雨愛")
+
+    def test_track_for_playlist_keeps_original_names(self):
+        track = server.track_for_playlist(
+            {"title": "LydiaFIR飞儿乐团(高清)", "artist": "Someone", "filename": "a.mp3"},
+            "abc12345678",
+            "https://www.youtube.com/watch?v=abc12345678",
+            "Lydia",
+            "F.I.R",
+        )
+        self.assertEqual(track["title"], "Lydia")
+        self.assertEqual(track["artist"], "F.I.R")
+        self.assertEqual(track["filename"], "a.mp3")
+        self.assertEqual(track["artistConfidence"], 1)
+        self.assertFalse(track["needsArtistConfirmation"])
 
     def test_attach_removes_then_adds(self):
         calls = []
