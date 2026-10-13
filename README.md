@@ -7,6 +7,7 @@
 ## 怎麼用（建議）
 
 https://youtu.be/PVoaureN8vg  (影片說明)
+
 [影片](https://youtu.be/PVoaureN8vg)  點這也可以
 
 不用自己打指令。
