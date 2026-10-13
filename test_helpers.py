@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.6.2")
+        self.assertEqual(server.APP_VERSION, "0.6.3")
 
 
 class FakeResponse:
@@ -306,10 +306,17 @@ class ElitesandProxyTests(unittest.TestCase):
 
         with mock.patch.object(
             server, "find_elitesand", return_value={"ok": True, "base": "http://127.0.0.1:3000"}
-        ), mock.patch.object(server.urllib.request, "urlopen", side_effect=fake_urlopen):
+        ), mock.patch.object(server, "elitesand_attach_to_playlist", return_value=True) as attach, mock.patch.object(
+            server.urllib.request, "urlopen", side_effect=fake_urlopen
+        ):
             result = server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E", "1234")
         self.assertFalse(result["skipped"])
+        self.assertTrue(result["playlistOk"])
         self.assertEqual(result["filename"], "song.mp3")
+        attach.assert_called_once()
+        sent_track = attach.call_args.args[1]
+        self.assertEqual(sent_track["id"], "abc")
+        self.assertEqual(sent_track["filename"], "song.mp3")
         self.assertEqual(captured["url"], "http://127.0.0.1:3000/api/youtube")
         self.assertEqual(captured["method"], "POST")
         self.assertEqual(captured["body"]["url"], "https://www.youtube.com/watch?v=lOL3CEton6E")
@@ -322,10 +329,14 @@ class ElitesandProxyTests(unittest.TestCase):
 
         with mock.patch.object(
             server, "find_elitesand", return_value={"ok": True, "base": "http://127.0.0.1:3000"}
-        ), mock.patch.object(server.urllib.request, "urlopen", side_effect=fake_urlopen):
+        ), mock.patch.object(server, "elitesand_attach_to_playlist", return_value=True) as attach, mock.patch.object(
+            server.urllib.request, "urlopen", side_effect=fake_urlopen
+        ):
             result = server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E")
         self.assertTrue(result["skipped"])
+        self.assertTrue(result["playlistOk"])
         self.assertEqual(result["filename"], "old.mp3")
+        attach.assert_called_once()
 
     def test_import_pin_required(self):
         def fake_urlopen(request, timeout=0):
@@ -374,10 +385,42 @@ class ElitesandProxyTests(unittest.TestCase):
 
         with mock.patch.object(
             server, "find_elitesand", return_value={"ok": True, "base": "http://127.0.0.1:3000"}
-        ), mock.patch.object(server.urllib.request, "urlopen", side_effect=fake_urlopen):
+        ), mock.patch.object(server, "elitesand_attach_to_playlist") as attach, mock.patch.object(
+            server.urllib.request, "urlopen", side_effect=fake_urlopen
+        ):
             with self.assertRaises(server.SongListError) as ctx:
                 server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E")
         self.assertIn("不是 Elitesand", str(ctx.exception))
+        attach.assert_not_called()
+
+
+class PlaylistAttachTests(unittest.TestCase):
+    def test_track_for_playlist_fills_id(self):
+        track = server.track_for_playlist({"title": "雨愛", "filename": "a.mp3"}, "abc12345678", "https://www.youtube.com/watch?v=abc12345678")
+        self.assertEqual(track["id"], "abc12345678")
+        self.assertEqual(track["source"], "youtube")
+
+    def test_attach_removes_then_adds(self):
+        calls = []
+
+        class FakeSio:
+            connected = True
+
+            def emit(self, event, data=None):
+                calls.append(("emit", event, data))
+
+            def call(self, event, data=None, timeout=0):
+                calls.append(("call", event, data))
+                return {"ok": True, "added": 1}
+
+        found = {"ok": True, "base": "http://127.0.0.1:3000"}
+        track = {"id": "abc", "title": "雨愛", "filename": "a.mp3"}
+        with mock.patch.object(server, "elitesand_controller_socket", return_value=FakeSio()):
+            self.assertTrue(server.elitesand_attach_to_playlist(found, track, "1234"))
+        self.assertEqual(calls[0], ("emit", "playlist:remove", "abc"))
+        self.assertEqual(calls[1][0], "call")
+        self.assertEqual(calls[1][1], "playlist:add")
+        self.assertEqual(calls[1][2][0]["filename"], "a.mp3")
 
 
 if __name__ == "__main__":

@@ -259,7 +259,7 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.2</span></h1>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.3</span></h1>
   <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗可改歌名／歌手（在原字上改）再重試。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -334,10 +334,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」。失敗的歌可直接改表格裡的歌名／歌手（原字留下，只改錯的），Enter 會用新字重搜那一首；或改完後按失敗清單的「重試這 N 首」。Elitesand 有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」。會下載進媒體庫，並掛上<strong>目前播放清單</strong>（取代「音檔遺失」那一列），不必再一首一首點。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.2。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.3。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -654,6 +654,7 @@ function reclaimFakeSends() {
   for (const song of current.songs) {
     if (!isMockSent(song)) continue;
     song.elitesandOk = false;
+    song.playlistOk = false;
     song.elitesandFile = "";
     song.audioError = "先前沒進真正的 Elitesand，請重送";
     count += 1;
@@ -772,8 +773,12 @@ function audioCell(song) {
     td.textContent = song.audioFile;
     return td;
   }
+  if (song.playlistOk) {
+    td.textContent = song.elitesandFile ? `${song.elitesandFile} · 已進清單` : "已進播放清單";
+    return td;
+  }
   if (song.elitesandOk) {
-    td.textContent = song.elitesandFile || "已進 Elitesand";
+    td.textContent = song.elitesandFile || "已進媒體庫";
     return td;
   }
   if (song.audioError) {
@@ -864,6 +869,7 @@ function commitSongField(song, field, raw) {
   song.youtubeUploader = "";
   song.youtubeError = "";
   song.elitesandOk = false;
+  song.playlistOk = false;
   song.elitesandFile = "";
   song.elitesandSkipped = false;
   song.audioError = "";
@@ -1199,6 +1205,7 @@ async function sendOneElitesand(song) {
     throw new Error("連到的不是 Elitesand Pro（假服務）。請只留 Elitesand 視窗再開一次。");
   }
   song.elitesandOk = true;
+  song.playlistOk = Boolean(payload.playlistOk);
   song.elitesandFile = filename;
   song.elitesandSkipped = Boolean(payload.skipped);
   song.audioError = "";
@@ -1234,6 +1241,7 @@ async function sendElitesandTargets(targets) {
         else ok += 1;
       } catch (error) {
         song.elitesandOk = false;
+        song.playlistOk = false;
         song.elitesandFile = "";
         song.audioError = error.message || "送到 Elitesand 失敗";
         failed += 1;
@@ -1265,7 +1273,7 @@ sendElitesandButton.addEventListener("click", () => {
   if (!current || elitesandSending) return;
   reclaimFakeSends();
   const failed = failFilter === "es" ? sendFailedSongs() : visibleSongs().filter(isSendFail);
-  const pending = visibleSongs().filter((song) => song.youtubeUrl && !song.elitesandOk);
+  const pending = visibleSongs().filter((song) => song.youtubeUrl && !song.playlistOk);
   if (failFilter === "es" || (failed.length && failed.length === pending.length)) {
     if (!failed.length) {
       setStatus("目前沒有送出失敗的歌。", false);
