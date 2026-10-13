@@ -1,11 +1,6 @@
 #!/bin/bash
 cd "$(dirname "$0")" || exit 1
 
-echo
-echo "歌單轉入啟動中..."
-echo "這個視窗請留著，用完再關。"
-echo "請不要同時打開「啟動記錄.txt」。"
-echo
 
 export PATH="$HOME/Library/Python/3.13/bin:$HOME/Library/Python/3.12/bin:$HOME/Library/Python/3.11/bin:$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
