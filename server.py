@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.6.1"
+APP_VERSION = "0.6.2"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -42,6 +42,7 @@ YTDLP_TIMEOUT_SEC = 45
 DOWNLOAD_TIMEOUT_SEC = 180
 ELITESAND_TIMEOUT_SEC = 300
 ELITESAND_PORTS = list(range(3000, 3011))
+ELITESAND_VERSION_RE = re.compile(r"^\d+\.\d+")
 AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".opus", ".aac", ".wav", ".flac", ".webm"}
 
 HOLE = -1
@@ -788,47 +789,75 @@ def elitesand_base_override():
     return raw or ""
 
 
+def elitesand_json(url, timeout=0.8):
+    request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "go-to-ktv"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def is_elitesand_health(payload):
+    """Elitesand Pro /api/health 獨有：status、數字版本、timestamp、portFallbackFrom。"""
     if not isinstance(payload, dict):
-        return False
-    if payload.get("ytdlp") is not None or payload.get("audioDir") is not None:
         return False
     if payload.get("status") != "ok":
         return False
-    version = str(payload.get("version") or "").strip()
-    if not version or version.lower() == "mock":
+    if "portFallbackFrom" not in payload:
         return False
-    if payload.get("timestamp") is None:
+    if not isinstance(payload.get("timestamp"), (int, float)):
+        return False
+    version = str(payload.get("version") or "").strip()
+    if version.lower() == "mock" or not ELITESAND_VERSION_RE.match(version):
         return False
     return True
 
 
+def is_elitesand_obs_launcher(payload):
+    if not isinstance(payload, dict):
+        return False
+    blob = json.dumps(payload.get("files") or {}, ensure_ascii=False)
+    return "Elitesand-Pro" in blob or "elitesand-pro" in blob.lower()
+
+
 def probe_elitesand(base):
-    url = f"{base}/api/health"
-    request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "go-to-ktv"})
+    health = elitesand_json(f"{base}/api/health")
+    if not is_elitesand_health(health):
+        return None
+    if not is_elitesand_obs_launcher(elitesand_json(f"{base}/api/obs-launcher")):
+        return None
     try:
-        with urllib.request.urlopen(request, timeout=0.8) as response:
-            payload = json.loads(response.read().decode("utf-8", errors="replace"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
-        return None
-    if not is_elitesand_health(payload):
-        return None
+        probed_port = int(urllib.parse.urlparse(base).port or "0")
+    except (TypeError, ValueError):
+        probed_port = 0
+    reported = health.get("port")
+    try:
+        reported_port = int(reported) if reported is not None else probed_port
+    except (TypeError, ValueError):
+        reported_port = probed_port
     return {
         "ok": True,
         "base": base,
-        "port": payload.get("port"),
-        "version": str(payload.get("version") or ""),
+        "port": reported_port,
+        "version": str(health.get("version") or ""),
+        "portMatch": reported_port == probed_port,
     }
 
 
 def find_elitesand():
     override = elitesand_base_override()
     bases = [override] if override else [f"http://127.0.0.1:{port}" for port in ELITESAND_PORTS]
+    hits = []
     for base in bases:
         found = probe_elitesand(base)
         if found:
-            return found
-    return None
+            hits.append(found)
+    if not hits:
+        return None
+    hits.sort(key=lambda item: (bool(item.get("portMatch")), int(item.get("port") or 0)), reverse=True)
+    return hits[0]
 
 
 def is_stub_elitesand_track(track):
@@ -840,7 +869,7 @@ def is_stub_elitesand_track(track):
 def elitesand_import_youtube(raw_url, pin=""):
     found = find_elitesand()
     if not found:
-        raise SongListError("找不到正在跑的 Elitesand Pro。請先在這台電腦打開 Elitesand，再按一次（預設 http://127.0.0.1:3000）。若 3000 被其他程式佔走，Elitesand 可能在 3001 起跳。")
+        raise SongListError("找不到 Elitesand Pro。請先打開它；本工具會認它的健康檢查與 /api/obs-launcher。若 3000 被佔，它會在 3001–3010。")
     _video_id, watch_url = parse_watch_url(raw_url)
     body = json.dumps({"url": watch_url, "isBatch": True}).encode("utf-8")
     headers = {

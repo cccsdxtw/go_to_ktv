@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.6.1")
+        self.assertEqual(server.APP_VERSION, "0.6.2")
 
 
 class FakeResponse:
@@ -227,6 +227,27 @@ class FakeHTTPError(urllib.error.HTTPError):
         )
 
 
+def elitesand_health(port, version="0.9.9.5"):
+    return {
+        "status": "ok",
+        "version": version,
+        "timestamp": 1710000000000,
+        "port": port,
+        "portFallbackFrom": 3000 if port != 3000 else None,
+    }
+
+
+def elitesand_obs(port):
+    return {
+        "dir": "C:/Elitesand Pro/data/obs-sources",
+        "port": port,
+        "files": {
+            "lyrics": f"C:/Elitesand-Pro-Lyrics.html",
+            "setlist": f"C:/Elitesand-Pro-Setlist.html",
+        },
+    }
+
+
 class ElitesandProxyTests(unittest.TestCase):
     def test_find_scans_ports(self):
         calls = []
@@ -234,7 +255,9 @@ class ElitesandProxyTests(unittest.TestCase):
         def fake_urlopen(request, timeout=0):
             calls.append(request.full_url)
             if request.full_url.endswith(":3001/api/health"):
-                return FakeResponse({"status": "ok", "version": "1.2.3", "port": 3001, "timestamp": 1})
+                return FakeResponse(elitesand_health(3001))
+            if request.full_url.endswith(":3001/api/obs-launcher"):
+                return FakeResponse(elitesand_obs(3001))
             raise urllib.error.URLError("offline")
 
         with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": ""}, clear=False), mock.patch.object(
@@ -243,13 +266,15 @@ class ElitesandProxyTests(unittest.TestCase):
             found = server.find_elitesand()
         self.assertTrue(found["ok"])
         self.assertEqual(found["base"], "http://127.0.0.1:3001")
-        self.assertEqual(found["version"], "1.2.3")
+        self.assertEqual(found["version"], "0.9.9.5")
         self.assertTrue(any(":3000/api/health" in url for url in calls))
 
     def test_find_override(self):
         def fake_urlopen(request, timeout=0):
             if request.full_url == "http://127.0.0.1:3999/api/health":
-                return FakeResponse({"status": "ok", "version": "dev", "port": 3999, "timestamp": 1})
+                return FakeResponse(elitesand_health(3999))
+            if request.full_url == "http://127.0.0.1:3999/api/obs-launcher":
+                return FakeResponse(elitesand_obs(3999))
             raise urllib.error.URLError("offline")
 
         with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": "http://127.0.0.1:3999"}, clear=False), mock.patch.object(
@@ -318,9 +343,11 @@ class ElitesandProxyTests(unittest.TestCase):
             if request.full_url.endswith(":3000/api/health"):
                 return FakeResponse({"status": "ok", "version": "mock", "port": 3000, "timestamp": 1})
             if request.full_url.endswith(":3001/api/health"):
-                return FakeResponse({"ok": True, "ytdlp": True, "version": "0.6.1", "audioDir": "/tmp"})
+                return FakeResponse({"ok": True, "ytdlp": True, "version": "0.6.2", "audioDir": "/tmp"})
             if request.full_url.endswith(":3002/api/health"):
-                return FakeResponse({"status": "ok", "version": "5.1.0", "port": 3002, "timestamp": 9})
+                return FakeResponse(elitesand_health(3002, "0.9.9.5"))
+            if request.full_url.endswith(":3002/api/obs-launcher"):
+                return FakeResponse(elitesand_obs(3002))
             raise urllib.error.URLError("offline")
 
         with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": ""}, clear=False), mock.patch.object(
@@ -328,7 +355,18 @@ class ElitesandProxyTests(unittest.TestCase):
         ):
             found = server.find_elitesand()
         self.assertEqual(found["base"], "http://127.0.0.1:3002")
-        self.assertEqual(found["version"], "5.1.0")
+        self.assertEqual(found["version"], "0.9.9.5")
+
+    def test_rejects_health_without_elitesand_fields(self):
+        def fake_urlopen(request, timeout=0):
+            if "/api/health" in request.full_url:
+                return FakeResponse({"status": "ok", "version": "1.2.3", "timestamp": 1, "port": 3000})
+            raise urllib.error.URLError("offline")
+
+        with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": ""}, clear=False), mock.patch.object(
+            server.urllib.request, "urlopen", side_effect=fake_urlopen
+        ):
+            self.assertIsNone(server.find_elitesand())
 
     def test_import_rejects_stub_track(self):
         def fake_urlopen(request, timeout=0):
