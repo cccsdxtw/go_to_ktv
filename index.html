@@ -83,15 +83,47 @@
     cursor: pointer;
     display: inline-flex;
     align-items: center;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease, filter 0.12s ease, opacity 0.12s ease;
   }
   button.primary { background: var(--accent); color: #1a1008; border: 0; font-weight: 650; }
+  button.primary:hover:not(:disabled) {
+    background: #ff9d5a;
+    box-shadow: 0 0 0 3px rgba(255, 138, 61, 0.28);
+  }
+  button.primary:active:not(:disabled) {
+    transform: translateY(1px) scale(0.97);
+    background: #e5742c;
+    box-shadow: none;
+  }
   button.ghost, label.file-btn {
     background: transparent;
     color: var(--text);
     border: 1px solid var(--line);
   }
+  button.ghost:hover:not(:disabled), label.file-btn:hover {
+    background: #262b38;
+    border-color: #5a6278;
+  }
+  button.ghost:active:not(:disabled), label.file-btn:active {
+    transform: translateY(1px) scale(0.97);
+    background: #323848;
+  }
+  button.primary:focus-visible,
+  button.ghost:focus-visible,
+  label.file-btn:focus-visible,
+  button.chip:focus-visible,
+  button.fail-retry:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   button[hidden], label[hidden] { display: none !important; }
-  button:disabled { opacity: 0.55; cursor: wait; }
+  button:disabled, button.busy {
+    opacity: 0.72;
+    cursor: wait;
+  }
+  button.busy { box-shadow: 0 0 0 2px rgba(255, 138, 61, 0.35); }
   input[type="file"] { display: none; }
   .status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
   .status.error { color: var(--danger); }
@@ -119,8 +151,14 @@
     border-radius: 999px;
     padding: 7px 12px;
     cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
   }
+  .chip:hover { background: #323848; border-color: #5a6278; }
+  .chip:active { transform: translateY(1px) scale(0.97); }
   .chip[aria-pressed="true"] { background: var(--chip-on); border-color: var(--accent); color: #ffd7bf; }
+  .chip[aria-pressed="true"]:hover { background: #4a3426; }
   .count { color: var(--muted); font-size: 13px; margin-left: auto; }
   .pin-input {
     background: #151821;
@@ -205,7 +243,12 @@
     font-size: 12px;
     font-weight: 650;
     cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.12s ease, transform 0.08s ease, filter 0.12s ease;
   }
+  .fail-retry:hover:not(:disabled) { filter: brightness(1.08); }
+  .fail-retry:active:not(:disabled) { transform: translateY(1px) scale(0.97); }
   .fail-item {
     display: block;
     width: 100%;
@@ -219,12 +262,25 @@
     font: inherit;
     font-size: 13px;
     line-height: 1.4;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.12s ease;
   }
+  .fail-item:hover { background: #3a2418; }
+  .fail-item:active { background: #4a2c1c; }
   .fail-item:last-child { border-bottom: 0; }
   .fail-item small { display: block; color: #ffb4b4; opacity: 0.85; font-size: 12px; }
   .tags { display: flex; gap: 6px; flex-wrap: wrap; }
   .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #2a3142; color: #d7deee; }
   .empty { padding: 28px 14px; color: var(--muted); }
+  .hint {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.55;
+    max-width: 46em;
+  }
+  .hint strong { color: #ffd7bf; font-weight: 650; }
   .import-note {
     margin: 14px 0 0;
     color: var(--muted);
@@ -259,7 +315,7 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.4</span></h1>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.5</span></h1>
   <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗可改歌名／歌手（在原字上改）再重試。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -294,6 +350,7 @@
         <h2 id="list-title"></h2>
         <p class="meta" id="list-meta"></p>
         <p class="meta" id="elitesand-status">正在找 Elitesand…</p>
+        <p class="hint">找不到 Elitesand、或「送到 Elitesand 下載」一直停住時：看工作列<strong>右下角往上的小箭頭</strong>，把 VPN／虛擬區網（常見如 Radmin VPN、Tailscale、Clash）先<strong>中斷連線</strong>或關掉，改用這台電腦自己的 Wi‑Fi／網路線。用完這個頁面再把它開回去即可。Mac 則在選單列的 VPN／Clash 圖示裡中斷。</p>
       </div>
       <div class="actions">
         <button class="ghost" id="copy" type="button">複製到試算表</button>
@@ -334,10 +391,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」。會下載進媒體庫，並掛上<strong>目前播放清單</strong>（取代「音檔遺失」那一列），不必再一首一首點。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」（按下去會立刻變成「正在交給 Elitesand」，一首一首會比較久，屬正常）。會下載進媒體庫，並掛上<strong>目前播放清單</strong>（取代「音檔遺失」那一列），不必再一首一首點。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。若一直連不上，先關掉 VPN／虛擬區網（工作列右下角小箭頭裡的圖示 → 中斷連線）。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.4。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.5。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -410,15 +467,40 @@ setInterval(refreshElitesandStatus, 8000);
 function networkErrorMessage(error, action) {
   const message = String(error && error.message || "");
   if (message === "Failed to fetch" || error instanceof TypeError) {
-    return `${action}連不上伺服器。請確認遠端有跑 python server.py，並用 http://伺服器IP:8765 打開這個頁面（不要用檔案直接開）。若在別台連，防火牆也要放行 8765。`;
+    return `${action}連不上伺服器。請確認遠端有跑 python server.py，並用 http://伺服器IP:8765 打開這個頁面（不要用檔案直接開）。若在別台連，防火牆也要放行 8765。若本機一直連不上 Elitesand，先關掉 VPN／虛擬區網再試。`;
   }
   return message || `${action}失敗。`;
+}
+
+function rememberLabel(button) {
+  if (button && !button.dataset.idleLabel) button.dataset.idleLabel = button.textContent;
+}
+
+function setButtonBusy(button, busy, label) {
+  if (!button) return;
+  rememberLabel(button);
+  button.disabled = Boolean(busy);
+  button.classList.toggle("busy", Boolean(busy));
+  button.setAttribute("aria-busy", busy ? "true" : "false");
+  button.textContent = busy && label ? label : button.dataset.idleLabel;
+}
+
+function flashButton(button, label, ms) {
+  if (!button) return;
+  rememberLabel(button);
+  button.classList.add("busy");
+  button.textContent = label;
+  clearTimeout(Number(button.dataset.flashTimer || 0));
+  button.dataset.flashTimer = String(setTimeout(() => {
+    button.classList.remove("busy");
+    button.textContent = button.dataset.idleLabel;
+  }, ms || 1200));
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const url = urlInput.value.trim();
-  fetchButton.disabled = true;
+  setButtonBusy(fetchButton, true, "正在抓取…");
   setStatus("正在抓取歌單…", false);
   try {
     const response = await fetch("/api/songs", {
@@ -437,7 +519,7 @@ form.addEventListener("submit", async (event) => {
   } catch (error) {
     setStatus(networkErrorMessage(error, "抓取歌單"), true);
   } finally {
-    fetchButton.disabled = false;
+    setButtonBusy(fetchButton, false);
   }
 });
 
@@ -458,6 +540,7 @@ sheetFile.addEventListener("change", async () => {
 sheetParse.addEventListener("click", () => {
   try {
     applySheetText(sheetText.value, "sheet-import");
+    flashButton(sheetParse, "已轉成歌單");
   } catch (error) {
     setStatus(error.message || "解析失敗。", true);
   }
@@ -1027,7 +1110,7 @@ async function searchYoutubeTargets(targets) {
   }
   youtubeSearching = true;
   youtubeStopRequested = false;
-  youtubeSearchButton.disabled = true;
+  setButtonBusy(youtubeSearchButton, true, "正在搜尋 YouTube…");
   youtubeStopButton.hidden = false;
   let ok = 0;
   let failed = 0;
@@ -1035,6 +1118,7 @@ async function searchYoutubeTargets(targets) {
     for (let i = 0; i < targets.length; i++) {
       if (youtubeStopRequested) break;
       const song = targets[i];
+      setButtonBusy(youtubeSearchButton, true, `正在搜尋 ${i + 1}/${targets.length}`);
       setStatus(`正在搜尋 YouTube ${i + 1}/${targets.length}：${song.title}`, false);
       try {
         await searchOneYoutube(song);
@@ -1051,7 +1135,7 @@ async function searchYoutubeTargets(targets) {
     finishWithFails(prefix, ytFailedSongs());
   } finally {
     youtubeSearching = false;
-    youtubeSearchButton.disabled = false;
+    setButtonBusy(youtubeSearchButton, false);
     youtubeStopButton.hidden = true;
   }
 }
@@ -1130,7 +1214,7 @@ downloadAudioButton.addEventListener("click", async () => {
   }
   audioDownloading = true;
   audioStopRequested = false;
-  downloadAudioButton.disabled = true;
+  setButtonBusy(downloadAudioButton, true, "正在另存音檔…");
   audioStopButton.hidden = false;
   let ok = 0;
   let skipped = 0;
@@ -1139,6 +1223,7 @@ downloadAudioButton.addEventListener("click", async () => {
     for (let i = 0; i < targets.length; i++) {
       if (audioStopRequested) break;
       const song = targets[i];
+      setButtonBusy(downloadAudioButton, true, `正在另存 ${i + 1}/${targets.length}`);
       setStatus(`正在下載音檔 ${i + 1}/${targets.length}：${song.title}`, false);
       try {
         await downloadOneAudio(song);
@@ -1155,7 +1240,7 @@ downloadAudioButton.addEventListener("click", async () => {
     finishWithFails(prefix, sendFailedSongs());
   } finally {
     audioDownloading = false;
-    downloadAudioButton.disabled = false;
+    setButtonBusy(downloadAudioButton, false);
     audioStopButton.hidden = true;
   }
 });
@@ -1215,19 +1300,23 @@ async function sendOneElitesand(song) {
 
 async function sendElitesandTargets(targets) {
   if (!current || elitesandSending) return;
-  const online = await refreshElitesandStatus();
-  if (!online) {
-    setStatus("請先打開 Elitesand Pro（預設 http://127.0.0.1:3000；被占用會改 3001–3010），再按一次。", true);
-    return;
-  }
   if (!targets.length) {
     setStatus("沒有要重試的送出失敗項目。", false);
     return;
   }
   elitesandSending = true;
   elitesandStopRequested = false;
-  sendElitesandButton.disabled = true;
+  setButtonBusy(sendElitesandButton, true, "正在交給 Elitesand…");
   elitesandStopButton.hidden = false;
+  setStatus("已點到，正在連 Elitesand（下載一首會比較久）…", false);
+  const online = await refreshElitesandStatus();
+  if (!online) {
+    elitesandSending = false;
+    setButtonBusy(sendElitesandButton, false);
+    elitesandStopButton.hidden = true;
+    setStatus("請先打開 Elitesand Pro（預設 http://127.0.0.1:3000；被占用會改 3001–3010）。若已打開仍找不到，先關掉 VPN／虛擬區網再試。", true);
+    return;
+  }
   let ok = 0;
   let skipped = 0;
   let failed = 0;
@@ -1236,7 +1325,8 @@ async function sendElitesandTargets(targets) {
     for (let i = 0; i < targets.length; i++) {
       if (elitesandStopRequested) break;
       const song = targets[i];
-      setStatus(`正在交給 Elitesand ${i + 1}/${targets.length}：${song.title}`, false);
+      setButtonBusy(sendElitesandButton, true, `正在交給 Elitesand ${i + 1}/${targets.length}`);
+      setStatus(`正在交給 Elitesand ${i + 1}/${targets.length}：${song.title}（請等，沒當機）`, false);
       try {
         await sendOneElitesand(song);
         if (song.elitesandSkipped) skipped += 1;
@@ -1265,7 +1355,7 @@ async function sendElitesandTargets(targets) {
     }
   } finally {
     elitesandSending = false;
-    sendElitesandButton.disabled = false;
+    setButtonBusy(sendElitesandButton, false);
     elitesandStopButton.hidden = true;
     refreshElitesandStatus();
   }
@@ -1302,12 +1392,16 @@ elitesandStopButton.addEventListener("click", () => {
 });
 
 openAudioFolderButton.addEventListener("click", async () => {
+  setButtonBusy(openAudioFolderButton, true, "正在開啟…");
   try {
     const response = await fetch("/api/open-audio-folder", { method: "POST" });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "無法打開資料夾。");
     setStatus(`音檔資料夾：${payload.folder}`, false);
+    setButtonBusy(openAudioFolderButton, false);
+    flashButton(openAudioFolderButton, "已開啟");
   } catch (error) {
+    setButtonBusy(openAudioFolderButton, false);
     setStatus(networkErrorMessage(error, "開啟資料夾"), true);
   }
 });
@@ -1316,6 +1410,7 @@ document.getElementById("download").addEventListener("click", () => {
   if (!current) return;
   const base = current.exportBase || current.username || "songs";
   downloadText(`${base}-songs.csv`, `\uFEFF${toCsv(visibleSongs())}`, "text/csv;charset=utf-8");
+  flashButton(document.getElementById("download"), "已下載 CSV");
 });
 
 document.getElementById("download-elitesand").addEventListener("click", () => {
@@ -1325,6 +1420,7 @@ document.getElementById("download-elitesand").addEventListener("click", () => {
     JSON.stringify(elitesandDocument(visibleSongs()), null, 2),
     "application/json;charset=utf-8"
   );
+  flashButton(document.getElementById("download-elitesand"), "已下載 json");
 });
 
 document.getElementById("copy").addEventListener("click", async () => {
