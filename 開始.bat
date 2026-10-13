@@ -5,7 +5,7 @@ title 歌單轉入
 chcp 65001 >nul
 
 echo.
-echo 歌單轉入 v0.5.1 啟動中...
+echo 歌單轉入 v0.5.2 啟動中...
 echo 這個黑視窗請留著，用完再關。
 echo 若跳出視窗問要不要關掉舊程式，請按「是」。
 echo.
@@ -27,7 +27,7 @@ if not defined PY (
 
 echo 使用 Python：%PY%
 echo 正在準備套件（第一次會久一點，請等）...
-%PY% -m pip install -r "%~dp0requirements.txt"
+%PY% -m pip install -U -r "%~dp0requirements.txt"
 if errorlevel 1 (
   echo.
   echo 套件安裝失敗。請確認網路正常，再雙擊一次。

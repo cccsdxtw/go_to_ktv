@@ -2,7 +2,7 @@
 cd "$(dirname "$0")" || exit 1
 
 echo
-echo "歌單轉入 v0.5.1 啟動中..."
+echo "歌單轉入 v0.5.2 啟動中..."
 echo "這個視窗請留著，用完再關。"
 echo "正確網頁標題是「歌單轉入」，不是「哈娜比77 歌單」。"
 echo
@@ -19,7 +19,7 @@ fi
 
 echo "使用：$(command -v python3)"
 echo "正在準備套件（第一次會久一點，請等）..."
-if ! python3 -m pip install -r requirements.txt; then
+if ! python3 -m pip install -U -r requirements.txt; then
   echo
   echo "套件安裝失敗。請確認網路正常，再雙擊一次。"
   echo
