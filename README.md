@@ -1,95 +1,56 @@
 # go_to_ktv
 
-把歌單轉成 Elitesand Pro 可唱的歌：**用 Elitesand 自己的 YouTube 下載**。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube **伴奏**。版本 **v0.6.7**。
+把歌單轉成 Elitesand Pro 可唱的歌：搜 YouTube **伴奏**，再交給 **Elitesand 自己下載**，並掛上目前播放清單。版本 **v0.6.7**（對應 Elitesand Pro **v1.1.0**）。
 
-目前對應版本 Elitesand v1.1.0
+影片說明：https://youtu.be/PVoaureN8vg
 
-## 怎麼用（建議）
-
-https://youtu.be/PVoaureN8vg  (影片說明)
-
-[影片](https://youtu.be/PVoaureN8vg)  點這也可以
+## 怎麼用
 
 不用自己打指令。
 
 1. 安裝一次 [Python](https://www.python.org/downloads/)（Windows 請勾選 Add to PATH）
-2. 先打開 **Elitesand Pro**（本機，預設埠 3000）
-3. 雙擊：
-   - Windows：`開始.bat`（若中文檔名有問題，可改雙擊 `start.bat`）
-   - Mac：`開始.command`（若不能執行，終端機跑一次 `chmod +x 開始.command`）
-4. 瀏覽器會自動打開；黑色／終端機視窗要留著
+2. 先打開 **Elitesand Pro**
+3. 雙擊 `開始.bat`（Windows；檔名有問題可改雙擊 `start.bat`）或 `開始.command`（Mac）
+4. 瀏覽器會自動打開。使用中請留著黑色視窗
 
-用完請按頁面上方紅色「**結束程式（讓出 8765）**」。按了之後 `http://127.0.0.1:8765` 會讓出來，黑色命令提示字元也會一起關掉。下次再開就不必把舊的頂掉。**只關瀏覽器分頁是不夠的。** 若還是被佔著，才會跳出視窗問要不要結束舊的。畫面標題是「歌單轉入 v0.6.7」。
+不要只雙擊 `index.html`，那樣抓歌單、搜 YouTube、送到 Elitesand 都不會動。
 
-> 不要只雙擊 `index.html`。網址抓歌、YouTube 搜尋與送到 Elitesand 需要背景小伺服器；「開始」會幫你開好。
+### 轉歌
 
-## 頁面功能
+1. 貼上 `https://streamersonglist.com/t/名稱/songs` 按「抓取歌單」  
+   或上傳 CSV／從試算表貼上，按「轉成歌單」（表頭用「標題／歌名」「歌手」；沒表頭時第一欄歌名、第二欄歌手）
+2. 按「搜尋 YouTube」（會加「伴奏」，並優先挑伴奏／karaoke）
+3. 看一下找到的影片；不對就直接在格子裡改歌名／歌手再重搜
+4. 按「**送到 Elitesand 下載**」（按下去會立刻改字，一首一首較久，屬正常）
 
-### 從網址
+音檔會進 Elitesand 媒體庫，並掛上**目前播放清單**（用歌單原本的歌名／歌手）。不必再一首一首點，也不必匯入 json。
 
-貼上 `https://streamersonglist.com/t/名稱/songs` → 抓取歌單
+Elitesand 有設 PIN 才要填。這個工具跟 Elitesand 要在**同一台電腦**。
 
-### 從 CSV／試算表
+### 失敗時
 
-上傳 `.csv`，或從 Excel／Google 試算表複製貼上 → 轉成歌單
+表格上方會列出失敗的歌，點歌名跳到該列。改完歌名／歌手後按「重試這 N 首」，或用「YouTube 失敗／送出失敗」篩選。
 
-表頭建議：`標題`／`歌名`、`歌手`／`artist`。沒有表頭時，預設第一欄歌名、第二欄歌手。
+### 用完
 
-### 搜 YouTube，再交給 Elitesand 下載
+按頁面上方紅色「**結束程式（讓出 8765）**」。`http://127.0.0.1:8765` 會空出來，黑色命令提示字元也會一起關。下次再雙擊「開始」即可。
 
-1. 按「搜尋 YouTube」（會自動加「伴奏」，並優先挑伴奏／karaoke）
-2. 看一下找到的影片
-3. 按「**送到 Elitesand 下載**」——一首一首呼叫本機 Elitesand 的 `POST /api/youtube`（跟右邊貼網址同一條路，含歌詞）
-4. 音檔進媒體庫，並掛上**目前播放清單**（取代「音檔遺失」那一列），不必再一首一首點。掛上去時用歌單原本的歌名／歌手，不是 YouTube 影片標題
+**只關瀏覽器分頁不夠**，位置還會被佔著。若還是跳出「上一份還佔著」，按「是」結束舊的。
 
-Elitesand 有設 PIN 才要填（本機 loopback 通常不用）。找不到程式時，頁面上會顯示「找不到 Elitesand」。
+## 注意
 
-YouTube 搜尋或送到 Elitesand 若有失敗，表格**上方**會列出失敗的歌，點一下跳到該列。歌名／歌手可直接在格子裡改（原字留下，只改錯的那幾個字），Enter 會用新字重搜那一首；或改完後按「重試這 N 首」。也可以按「YouTube 失敗／送出失敗」只看那些列。
+- 不要用 Elitesand 的「匯入歌單」代替下載：那只會有歌名和網址，首頁會顯示音檔遺失
+- 搜尋結果仍可能對錯，送出前請看一眼
+- 找不到 Elitesand、或下載卡住：先看它視窗是否開著；仍不行就關掉 VPN／虛擬區網（工作列右下角小箭頭）再試
+- 網址來源只讀 streamersonglist.com 公開歌單
 
-會用 Elitesand Pro 自己的健康檢查（含 `portFallbackFrom`）和 `/api/obs-launcher` 認人，略過假的 3000 服務。3000 被佔會找 3001–3010。
-
-「本機另存音檔」仍在，只是備用。沒有帳號下載。
-
-## Elitesand 匯入 json 與下載不是同一件事
-
-Elitesand Pro 的「匯入歌單」**只匯入歌名、歌手、YouTube 網址**，不會下載音檔，首頁會顯示音檔遺失。要立刻能唱，請走上面的「送到 Elitesand 下載」——這版會把音檔掛回目前播放清單。
-
-json 仍可當備份：
-
-```text
-%APPDATA%\Elitesand Pro\data\playlist-exports
-```
-
-一般路徑：
-
-```text
-C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports
-```
-
-## 進階
-
-若要自己下指令：
+## 進階（一般不用）
 
 ```bash
 pip install -r requirements.txt
 python server.py
 ```
 
-- 預設聽 `0.0.0.0:8765`，並自動打開瀏覽器
-- 不自動開瀏覽器：`GO_TO_KTV_NO_BROWSER=1`
-- 只聽本機：`GO_TO_KTV_HOST=127.0.0.1`
-- Elitesand 不在預設埠：`GO_TO_KTV_ELITESAND=http://127.0.0.1:3001`
-
-這個工具與 Elitesand 必須跑在**同一台電腦**（它只連 `127.0.0.1:3000`–`3010`）。遠端打開 8765 也可以，真正下載仍發生在那台本機的 Elitesand。
-
-## 注意
-
-- 網址來源只讀 `streamersonglist.com` 公開歌單
-- 表格來源不把檔案內容送到伺服器
-- YouTube 搜尋走本機 `yt-dlp`；實際抓檔交給 Elitesand
-- 搜尋結果仍可能對錯，送出前請看一眼
-- 找不到 Elitesand、或下載一直停住：工作列右下角小箭頭 → 把 VPN／虛擬區網（Radmin VPN、Tailscale、Clash 等）中斷連線，改用這台電腦自己的網路。用完再開回去。Mac 在選單列圖示裡中斷。頁面上 Elitesand 狀態下面也有這段說明。
-
-## 倉庫
+Elitesand 不在 3000 時：`GO_TO_KTV_ELITESAND=http://127.0.0.1:3001`
 
 https://github.com/cccsdxtw/go_to_ktv
