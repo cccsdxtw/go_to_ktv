@@ -2,7 +2,7 @@
 cd "$(dirname "$0")" || exit 1
 
 echo
-echo "歌單轉入 v0.6.4 啟動中..."
+echo "歌單轉入 v0.6.5 啟動中..."
 echo "這個視窗請留著，用完再關。"
 echo
 
