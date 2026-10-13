@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.5.2"
+APP_VERSION = "0.5.3"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -343,11 +343,16 @@ def is_bot_block(text):
 
 def friendly_download_error(text, tried_cookies=False):
     locked = bool(COOKIE_LOCK_RE.search(text or ""))
+    if not tried_cookies and (is_bot_block(text) or locked):
+        return (
+            "YouTube 現在常把匿名下載當成機器人。"
+            "本工具預設不讀你的帳號、也不上傳任何登入。"
+            "若仍要批量下載：請另開一個「下載專用」Google 帳號，勾選使用專用帳號後再試；不要用日常主帳號。"
+        )
     if is_bot_block(text) or tried_cookies or locked:
         return (
-            "YouTube 仍擋住下載。光開著 youtube.com 還不夠："
-            "請完全關掉 Chrome（工作列圖示也要關乾淨），再用「開始.bat」開本工具，選 Chrome 後按一次「下載全部音檔」。"
-            "或改用已登入 YouTube 的 Edge。Cookie 被鎖住時，開著瀏覽器會抓不到登入狀態。"
+            "專用帳號仍被擋。請用下載專用 Google 帳號登入後，把該瀏覽器關乾淨再試。"
+            "Cookie 只在這台電腦給 yt-dlp 用，不會傳到網路上。"
         )
     detail = (text or "").strip().splitlines()
     return (detail[-1] if detail else "音檔下載失敗。")[:240]
@@ -440,19 +445,24 @@ def run_ytdlp(command, timeout, cookie_browser=None, extractor=None):
     )
 
 
-def download_attempts(preferred_browser=""):
-    # 有登入 Cookie 時要用 web／mweb，android 常還是會被當成機器人。
+def download_attempts(preferred_browser="", use_cookies=False):
     extractors = (
-        "youtube:player_client=web,mweb",
         "youtube:player_client=tv_embedded,tv",
+        "youtube:player_client=web_safari",
+        "youtube:player_client=android,ios",
+        "youtube:player_client=web,mweb",
     )
     attempts = []
     working = (_working_ytdlp.get("browser"), _working_ytdlp.get("extractor"))
-    if working[0] or working[1]:
+    if working[1] and (use_cookies or not working[0]):
         attempts.append(working)
-    for spec in cookie_specs(preferred_browser):
+    if use_cookies:
+        for spec in cookie_specs(preferred_browser):
+            attempts.append((spec, "youtube:player_client=web,mweb"))
+            attempts.append((spec, "youtube:player_client=tv_embedded,tv"))
+    else:
         for extractor in extractors:
-            attempts.append((spec, extractor))
+            attempts.append((None, extractor))
     unique = []
     seen = set()
     for item in attempts:
@@ -650,7 +660,7 @@ def produced_audio_file(video_id):
     return matches[0]
 
 
-def download_youtube_audio(raw_url, title, artist, browser=""):
+def download_youtube_audio(raw_url, title, artist, browser="", use_cookies=False):
     ytdlp = find_ytdlp()
     if not ytdlp:
         raise SongListError("找不到 yt-dlp。請先執行：pip install yt-dlp")
@@ -686,7 +696,9 @@ def download_youtube_audio(raw_url, title, artist, browser=""):
     tried_cookies = False
     used_browser = None
     used_extractor = None
-    for cookie_browser, extractor in download_attempts(browser):
+    if not use_cookies:
+        browser = ""
+    for cookie_browser, extractor in download_attempts(browser, use_cookies=use_cookies):
         try:
             completed = run_ytdlp(
                 command,
@@ -824,6 +836,7 @@ class Handler(BaseHTTPRequestHandler):
                     incoming.get("title"),
                     incoming.get("artist"),
                     incoming.get("browser"),
+                    bool(incoming.get("useCookies")),
                 )
             except SongListError as error:
                 self.respond_json(400, {"error": str(error)})
