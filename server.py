@@ -8,6 +8,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -23,13 +24,23 @@ HOST = os.environ.get("GO_TO_KTV_HOST", "0.0.0.0").strip() or "0.0.0.0"
 PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
-APP_VERSION = "0.4.4"
+AUDIO_DIR = ROOT / "elitesand-audio"
+APP_VERSION = "0.5.0"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
+YOUTUBE_HOSTS = {
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "music.youtube.com",
+    "youtu.be",
+}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{2,40}$")
 PAGE_PATH_RE = re.compile(r"^/t/([A-Za-z0-9_]{2,40})(?:/songs)?/?$")
 MAX_PAGES = 80
 MAX_SONGS = 5000
 YTDLP_TIMEOUT_SEC = 45
+DOWNLOAD_TIMEOUT_SEC = 180
+AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".opus", ".aac", ".wav", ".flac", ".webm"}
 
 HOLE = -1
 NAN = -2
@@ -386,6 +397,164 @@ def search_youtube(title, artist):
     }
 
 
+def find_ffmpeg():
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    local = Path.home() / ".local" / "bin" / "ffmpeg"
+    if local.is_file():
+        return str(local)
+    return None
+
+
+def sanitize_for_filename(name):
+    cleaned = re.sub(r'[\\/:*?"<>|]', " ", str(name or ""))
+    return re.sub(r"\s+", " ", cleaned).strip()[:80]
+
+
+def build_track_filename(artist, title, ext):
+    clean_title = sanitize_for_filename(title) or "未知歌曲"
+    clean_artist = sanitize_for_filename(artist)
+    base = f"{clean_artist} - {clean_title}" if clean_artist else clean_title
+    if not str(ext).startswith("."):
+        ext = "." + str(ext)
+    return base + ext
+
+
+def unique_path(directory, filename):
+    path = directory / filename
+    if not path.exists():
+        return path
+    stem = path.stem
+    suffix = path.suffix
+    for index in range(2, 80):
+        candidate = directory / f"{stem} ({index}){suffix}"
+        if not candidate.exists():
+            return candidate
+    return directory / f"{stem}-{int(time.time())}{suffix}"
+
+
+def parse_watch_url(raw_url):
+    text = str(raw_url or "").strip()
+    if not text:
+        raise SongListError("請提供 YouTube 網址。")
+    if "://" not in text:
+        text = "https://" + text
+    parsed = urllib.parse.urlparse(text)
+    host = (parsed.hostname or "").lower()
+    if host not in YOUTUBE_HOSTS:
+        raise SongListError("目前只接受 YouTube 網址。")
+    video_id = ""
+    if host == "youtu.be":
+        video_id = (parsed.path or "/").strip("/").split("/")[0]
+    elif parsed.path == "/watch":
+        video_id = urllib.parse.parse_qs(parsed.query).get("v", [""])[0]
+    else:
+        match = re.match(r"^/(?:embed|shorts|v)/([A-Za-z0-9_-]{6,18})", parsed.path or "")
+        video_id = match.group(1) if match else ""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,18}", video_id or ""):
+        raise SongListError("這不是有效的 YouTube 影片網址。")
+    return video_id, f"https://www.youtube.com/watch?v={video_id}"
+
+
+def existing_download(video_id):
+    marker = AUDIO_DIR / f".{video_id}.done"
+    if not marker.is_file():
+        return None
+    saved = marker.read_text(encoding="utf-8").strip()
+    if not saved:
+        return None
+    path = AUDIO_DIR / saved
+    if path.is_file() and path.stat().st_size > 1024:
+        return path
+    return None
+
+
+def produced_audio_file(video_id):
+    matches = []
+    for candidate in AUDIO_DIR.glob(f"{video_id}.*"):
+        if candidate.suffix.lower() in AUDIO_EXTS and candidate.is_file():
+            matches.append(candidate)
+    if not matches:
+        return None
+    matches.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+    return matches[0]
+
+
+def download_youtube_audio(raw_url, title, artist):
+    ytdlp = find_ytdlp()
+    if not ytdlp:
+        raise SongListError("找不到 yt-dlp。請先執行：pip install yt-dlp")
+    video_id, watch_url = parse_watch_url(raw_url)
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    already = existing_download(video_id)
+    if already:
+        return {
+            "filename": already.name,
+            "folder": str(AUDIO_DIR),
+            "skipped": True,
+            "videoId": video_id,
+        }
+    ffmpeg = find_ffmpeg()
+    ext = ".mp3" if ffmpeg else ".m4a"
+    final_path = unique_path(AUDIO_DIR, build_track_filename(artist, title, ext))
+    command = [
+        ytdlp,
+        watch_url,
+        "--no-playlist",
+        "--no-warnings",
+        "--newline",
+        "-o",
+        str(AUDIO_DIR / f"{video_id}.%(ext)s"),
+    ]
+    if ffmpeg:
+        command.extend(["-x", "--audio-format", "mp3", "--audio-quality", "0"])
+    else:
+        command.extend(["-f", "bestaudio[ext=m4a]/bestaudio/best", "--no-keep-video"])
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=DOWNLOAD_TIMEOUT_SEC,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise SongListError("音檔下載逾時，請稍後再試。") from error
+    except OSError as error:
+        raise SongListError("無法啟動 yt-dlp。") from error
+    produced = produced_audio_file(video_id)
+    if completed.returncode != 0 or not produced:
+        detail = (completed.stderr or completed.stdout or "").strip().splitlines()
+        message = detail[-1] if detail else "音檔下載失敗。"
+        raise SongListError(message[:240])
+    try:
+        produced.replace(final_path)
+    except OSError:
+        shutil.copy2(produced, final_path)
+        produced.unlink(missing_ok=True)
+    marker = AUDIO_DIR / f".{video_id}.done"
+    marker.write_text(final_path.name, encoding="utf-8")
+    return {
+        "filename": final_path.name,
+        "folder": str(AUDIO_DIR),
+        "skipped": False,
+        "videoId": video_id,
+        "format": ext.lstrip("."),
+    }
+
+
+def open_audio_folder():
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    folder = str(AUDIO_DIR)
+    if os.name == "nt":
+        os.startfile(folder)
+        return folder
+    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    subprocess.Popen([opener, folder], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return folder
+
+
 def read_json_body(handler, max_length, empty_error):
     length = int(handler.headers.get("Content-Length") or "0")
     if length <= 0 or length > max_length:
@@ -416,12 +585,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/health":
             ytdlp = find_ytdlp()
+            ffmpeg = find_ffmpeg()
             self.respond_json(
                 200,
                 {
                     "ok": True,
                     "ytdlp": bool(ytdlp),
                     "ytdlpPath": ytdlp,
+                    "ffmpeg": bool(ffmpeg),
+                    "audioDir": str(AUDIO_DIR),
                     "version": APP_VERSION,
                 },
             )
@@ -450,6 +622,32 @@ class Handler(BaseHTTPRequestHandler):
                 return
             print(f"yt: {result['query']} -> {result['videoId']}", flush=True)
             self.respond_json(200, result)
+            return
+        if path == "/api/youtube-download":
+            try:
+                incoming = read_json_body(self, 12000, "請提供 YouTube 網址。")
+                result = download_youtube_audio(
+                    incoming.get("url"),
+                    incoming.get("title"),
+                    incoming.get("artist"),
+                )
+            except SongListError as error:
+                self.respond_json(400, {"error": str(error)})
+                return
+            skipped = " skip" if result.get("skipped") else ""
+            print(f"dl{skipped}: {result['videoId']} -> {result['filename']}", flush=True)
+            self.respond_json(200, result)
+            return
+        if path == "/api/open-audio-folder":
+            length = int(self.headers.get("Content-Length") or "0")
+            if length > 0:
+                self.rfile.read(min(length, 8000))
+            try:
+                folder = open_audio_folder()
+            except OSError as error:
+                self.respond_json(400, {"error": f"無法打開資料夾：{error}"})
+                return
+            self.respond_json(200, {"ok": True, "folder": folder})
             return
         self.send_error(404)
 
