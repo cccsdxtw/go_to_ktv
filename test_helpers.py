@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.6.0")
+        self.assertEqual(server.APP_VERSION, "0.6.1")
 
 
 class FakeResponse:

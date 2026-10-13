@@ -122,33 +122,15 @@
   }
   .chip[aria-pressed="true"] { background: var(--chip-on); border-color: var(--accent); color: #ffd7bf; }
   .count { color: var(--muted); font-size: 13px; margin-left: auto; }
-  .cookie-opt {
-    display: inline-flex;
-    align-items: flex-start;
-    gap: 8px;
-    color: var(--muted);
-    font-size: 13px;
-    max-width: 420px;
-    line-height: 1.4;
-  }
-  .cookie-opt input { margin-top: 3px; }
-  .browser-pick {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--muted);
-    font-size: 13px;
-  }
-  .browser-pick[hidden] { display: none !important; }
-  .browser-pick select, .pin-input {
+  .pin-input {
     background: #151821;
     color: var(--text);
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 8px 10px;
     font: inherit;
+    width: 140px;
   }
-  .pin-input { width: 140px; }
   td.err {
     max-width: 280px;
     color: var(--danger);
@@ -167,6 +149,44 @@
   th { position: sticky; top: 0; background: #222633; font-weight: 600; font-size: 13px; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tbody tr:hover { background: #232836; }
+  tr.fail-row td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+  tr.flash { background: #3a2424; }
+  .fail-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 10px;
+    margin: 0 0 12px;
+  }
+  .fail-panel[hidden] { display: none !important; }
+  .fail-box {
+    background: #2a1c12;
+    border: 1px solid #6a3b1d;
+    border-radius: 12px;
+    padding: 10px 12px;
+    max-height: 240px;
+    overflow: auto;
+  }
+  .fail-box h3 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #ffd7bf;
+  }
+  .fail-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid #3a2a1e;
+    color: var(--danger);
+    padding: 7px 0;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .fail-item:last-child { border-bottom: 0; }
+  .fail-item small { display: block; color: #ffb4b4; opacity: 0.85; font-size: 12px; }
   .tags { display: flex; gap: 6px; flex-wrap: wrap; }
   .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #2a3142; color: #d7deee; }
   .empty { padding: 28px 14px; color: var(--muted); }
@@ -204,8 +224,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.0</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，再按「送到 Elitesand 下載」——<strong>用 Elitesand 自己的下載</strong>（請先開著 Elitesand）。不必另存一份、也不用登入這個工具。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.1</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗的歌會列在表格上方，點歌名就能跳到那一列。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -246,18 +266,6 @@
         <button class="ghost" id="youtube-search" type="button">搜尋 YouTube</button>
         <button class="ghost" id="youtube-stop" type="button" hidden>停止搜尋</button>
         <button class="ghost" id="copy-youtube" type="button">複製全部 YouTube 網址</button>
-        <label class="cookie-opt">
-          <input id="use-cookies" type="checkbox">
-          使用下載專用帳號（讀本機 Cookie，不上傳；不要用主帳號）
-        </label>
-        <label class="browser-pick" id="browser-pick-wrap" hidden>專用帳號的瀏覽器
-          <select id="cookie-browser" aria-label="專用帳號的瀏覽器">
-            <option value="chrome">Chrome</option>
-            <option value="edge">Edge</option>
-            <option value="firefox">Firefox</option>
-            <option value="brave">Brave</option>
-          </select>
-        </label>
         <button class="primary" id="send-elitesand" type="button">送到 Elitesand 下載</button>
         <button class="ghost" id="elitesand-stop" type="button" hidden>停止送出</button>
         <input class="pin-input" id="elitesand-pin" type="password" placeholder="PIN（有設才填）" autocomplete="off">
@@ -270,8 +278,11 @@
     <div class="toolbar">
       <input id="q" type="search" placeholder="搜尋歌名或歌手" aria-label="搜尋歌名或歌手">
       <div class="chips" id="chips"></div>
+      <button class="chip" id="filter-yt-fail" type="button" aria-pressed="false">YouTube 失敗</button>
+      <button class="chip" id="filter-es-fail" type="button" aria-pressed="false">送出失敗</button>
       <div class="count" id="shown"></div>
     </div>
+    <div class="fail-panel" id="fail-panel" hidden></div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -288,10 +299,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube 後按「送到 Elitesand 下載」。會一首一首交給本機 Elitesand（預設埠 3000），用它原本就會的抓檔與歌詞，不必再拖檔、也不用把 Google 帳號交給這個工具。Elitesand 有設 PIN 才要填。「本機另存」只是備用。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」。失敗的歌會出現在表格上方清單，點一下可跳到該列。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.0。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.1。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -309,21 +320,23 @@ const sendElitesandButton = document.getElementById("send-elitesand");
 const elitesandStopButton = document.getElementById("elitesand-stop");
 const elitesandPinInput = document.getElementById("elitesand-pin");
 const elitesandStatusEl = document.getElementById("elitesand-status");
-const cookieBrowserSelect = document.getElementById("cookie-browser");
-const useCookiesInput = document.getElementById("use-cookies");
-const browserPickWrap = document.getElementById("browser-pick-wrap");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const q = document.getElementById("q");
 const chipsEl = document.getElementById("chips");
 const rowsEl = document.getElementById("rows");
 const shownEl = document.getElementById("shown");
+const failPanel = document.getElementById("fail-panel");
+const filterYtFail = document.getElementById("filter-yt-fail");
+const filterEsFail = document.getElementById("filter-es-fail");
 let youtubeSearching = false;
 let youtubeStopRequested = false;
 let audioDownloading = false;
 let audioStopRequested = false;
 let elitesandSending = false;
 let elitesandStopRequested = false;
+let failFilter = "";
+let highlightIndex = -1;
 
 const TITLE_ALIASES = new Set(["標題", "歌名", "歌曲", "曲名", "title", "song", "song title", "name", "曲目"]);
 const ARTIST_ALIASES = new Set(["歌手", "藝術家", "演唱", "演唱者", "artist", "singer", "performer"]);
@@ -541,7 +554,11 @@ function detectDelimiter(text) {
 function showList(payload) {
   current = payload;
   selected.clear();
+  failFilter = "";
+  highlightIndex = -1;
   q.value = "";
+  filterYtFail.setAttribute("aria-pressed", "false");
+  filterEsFail.setAttribute("aria-pressed", "false");
   document.getElementById("list-title").textContent = `${payload.displayName} 的歌單`;
   if (payload.sourceKind === "streamersonglist" && payload.sourceUrl) {
     document.getElementById("list-meta").innerHTML = `共 ${payload.songs.length} 首 · 來源 <a href="${payload.sourceUrl}" target="_blank" rel="noreferrer">StreamerSonglist</a>`;
@@ -577,12 +594,103 @@ function visibleSongs() {
   if (!current) return [];
   const query = q.value.trim().toLowerCase();
   return current.songs.filter((song) => {
+    if (failFilter === "yt" && !isYtFail(song)) return false;
+    if (failFilter === "es" && !isSendFail(song)) return false;
     if (query && !`${song.title} ${song.artist}`.toLowerCase().includes(query)) return false;
     for (const tag of selected) {
       if (!(song.attributes || []).includes(tag)) return false;
     }
     return true;
   });
+}
+
+function isYtFail(song) {
+  return Boolean(song.youtubeError) && !song.youtubeUrl;
+}
+
+function isSendFail(song) {
+  return Boolean(song.audioError) && !song.elitesandOk && !song.audioFile;
+}
+
+function ytFailedSongs() {
+  return current ? current.songs.filter(isYtFail) : [];
+}
+
+function sendFailedSongs() {
+  return current ? current.songs.filter(isSendFail) : [];
+}
+
+function songLabel(song) {
+  return song.artist ? `${song.title} · ${song.artist}` : song.title;
+}
+
+function failNames(list, limit) {
+  const names = list.slice(0, limit).map((song) => song.title);
+  if (list.length > limit) names.push(`等 ${list.length} 首`);
+  return names.join("、");
+}
+
+function finishWithFails(prefix, failedList) {
+  if (!failedList.length) {
+    setStatus(prefix, false);
+    return;
+  }
+  setStatus(`${prefix}失敗：${failNames(failedList, 8)}。點表格上方清單可跳到該列。`, true);
+}
+
+function jumpToSong(index) {
+  highlightIndex = index;
+  q.value = "";
+  failFilter = "";
+  filterYtFail.setAttribute("aria-pressed", "false");
+  filterEsFail.setAttribute("aria-pressed", "false");
+  render();
+  const row = rowsEl.querySelector(`tr[data-i="${index}"]`);
+  if (row) row.scrollIntoView({ block: "center" });
+}
+
+function failItemButton(song) {
+  const index = current.songs.indexOf(song);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "fail-item";
+  button.title = song.youtubeError || song.audioError || "";
+  const label = document.createElement("span");
+  label.textContent = `${index + 1}. ${songLabel(song)}`;
+  const detail = document.createElement("small");
+  detail.textContent = song.youtubeError || song.audioError || "";
+  button.append(label, detail);
+  button.addEventListener("click", () => jumpToSong(index));
+  return button;
+}
+
+function renderFailPanel() {
+  const yt = ytFailedSongs();
+  const sent = sendFailedSongs();
+  if (!yt.length && !sent.length) {
+    failPanel.hidden = true;
+    failPanel.replaceChildren();
+    return;
+  }
+  failPanel.hidden = false;
+  const boxes = [];
+  if (yt.length) {
+    const box = document.createElement("div");
+    box.className = "fail-box";
+    const heading = document.createElement("h3");
+    heading.textContent = `YouTube 搜尋失敗 ${yt.length} 首（點歌名跳到該列）`;
+    box.append(heading, ...yt.map(failItemButton));
+    boxes.push(box);
+  }
+  if (sent.length) {
+    const box = document.createElement("div");
+    box.className = "fail-box";
+    const heading = document.createElement("h3");
+    heading.textContent = `送到 Elitesand 失敗 ${sent.length} 首（點歌名跳到該列）`;
+    box.append(heading, ...sent.map(failItemButton));
+    boxes.push(box);
+  }
+  failPanel.replaceChildren(...boxes);
 }
 
 function audioCell(song) {
@@ -619,8 +727,9 @@ function youtubeCell(song) {
     return td;
   }
   if (song.youtubeError) {
+    td.className = "err";
     td.textContent = song.youtubeError;
-    td.style.color = "var(--danger)";
+    td.title = song.youtubeError;
     return td;
   }
   td.textContent = "尚未搜尋";
@@ -632,16 +741,23 @@ function render() {
   const list = visibleSongs();
   const total = current ? current.songs.length : 0;
   const withUrl = current ? current.songs.filter((song) => song.youtubeUrl).length : 0;
-  const withAudio = current ? current.songs.filter((song) => song.audioFile).length : 0;
+  const ytFail = ytFailedSongs().length;
+  const sendFail = sendFailedSongs().length;
+  const sent = current ? current.songs.filter((song) => song.elitesandOk).length : 0;
   shownEl.textContent = list.length === total
-    ? `顯示 ${list.length} 首 · YouTube ${withUrl} · 音檔 ${withAudio}`
-    : `顯示 ${list.length} / ${total} 首 · YouTube ${withUrl} · 音檔 ${withAudio}`;
+    ? `顯示 ${list.length} 首 · YouTube ${withUrl} · 已送 ${sent} · 失敗 ${ytFail + sendFail}`
+    : `顯示 ${list.length} / ${total} 首 · YouTube ${withUrl} · 已送 ${sent} · 失敗 ${ytFail + sendFail}`;
+  renderFailPanel();
   if (!list.length) {
     rowsEl.innerHTML = '<tr><td class="empty" colspan="7">沒有符合的歌。</td></tr>';
     return;
   }
   rowsEl.replaceChildren(...list.map((song) => {
+    const index = current.songs.indexOf(song);
     const tr = document.createElement("tr");
+    tr.dataset.i = String(index);
+    if (isYtFail(song) || isSendFail(song)) tr.classList.add("fail-row");
+    if (index === highlightIndex) tr.classList.add("flash");
     tr.append(
       cell(song.title),
       cell(song.artist || ""),
@@ -803,11 +919,10 @@ youtubeSearchButton.addEventListener("click", async () => {
       }
       render();
     }
-    if (youtubeStopRequested) {
-      setStatus(`已停止。成功 ${ok}，失敗 ${failed}。`, failed > 0);
-    } else {
-      setStatus(`YouTube 搜尋完成。成功 ${ok}，失敗 ${failed}。`, failed > 0 && ok === 0);
-    }
+    const prefix = youtubeStopRequested
+      ? `已停止搜尋。成功 ${ok}，失敗 ${failed}。`
+      : `YouTube 搜尋完成。成功 ${ok}，失敗 ${failed}。`;
+    finishWithFails(prefix, ytFailedSongs());
   } finally {
     youtubeSearching = false;
     youtubeSearchButton.disabled = false;
@@ -834,26 +949,6 @@ copyYoutubeButton.addEventListener("click", async () => {
   setStatus(`已複製 ${urls.length} 條 YouTube 網址。建議改按「送到 Elitesand 下載」，用 Elitesand 自己抓檔。`, false);
 });
 
-const BROWSER_KEY = "go_to_ktv_browser";
-try {
-  const saved = localStorage.getItem(BROWSER_KEY);
-  if (saved && cookieBrowserSelect.querySelector(`option[value="${saved}"]`)) {
-    cookieBrowserSelect.value = saved;
-  }
-} catch (_) { /* ignore */ }
-cookieBrowserSelect.addEventListener("change", () => {
-  try { localStorage.setItem(BROWSER_KEY, cookieBrowserSelect.value); } catch (_) { /* ignore */ }
-});
-useCookiesInput.addEventListener("change", () => {
-  if (useCookiesInput.checked) {
-    const ok = window.confirm(
-      "會在這台電腦讀取瀏覽器登入 Cookie，不會傳到網路上。\n請用「下載專用」Google 帳號，不要用日常主帳號。\n確定要開啟？"
-    );
-    if (!ok) useCookiesInput.checked = false;
-  }
-  browserPickWrap.hidden = !useCookiesInput.checked;
-});
-
 async function downloadOneAudio(song) {
   let response;
   try {
@@ -863,9 +958,7 @@ async function downloadOneAudio(song) {
       body: JSON.stringify({
         url: song.youtubeUrl,
         title: song.title,
-        artist: song.artist || "",
-        browser: useCookiesInput.checked ? cookieBrowserSelect.value : "",
-        useCookies: useCookiesInput.checked
+        artist: song.artist || ""
       })
     });
   } catch (error) {
@@ -912,14 +1005,9 @@ downloadAudioButton.addEventListener("click", async () => {
       }
       render();
     }
-    const done = `成功 ${ok}，略過已存在 ${skipped}，失敗 ${failed}`;
-    if (audioStopRequested) {
-      setStatus(`已停止下載。${done}。音檔在 elitesand-audio 資料夾，可一次拖進 Elitesand。`, failed > 0);
-    } else if (failed && ok + skipped === 0) {
-      setStatus(`音檔下載失敗。${done}。已用本機模擬 Chrome（跟免登入網站同一類，不讀你的 Google 帳號）。`, true);
-    } else {
-      setStatus(`音檔下載完成。${done}。按「開啟音檔資料夾」，把檔案一次拖進 Elitesand 右邊本機檔案。`, failed > 0);
-    }
+    const done = `成功 ${ok}，略過已存在 ${skipped}，失敗 ${failed}。`;
+    const prefix = audioStopRequested ? `已停止另存。${done}` : `音檔另存完成。${done}`;
+    finishWithFails(prefix, sendFailedSongs());
   } finally {
     audioDownloading = false;
     downloadAudioButton.disabled = false;
@@ -1016,15 +1104,14 @@ sendElitesandButton.addEventListener("click", async () => {
       }
       render();
     }
-    const done = `成功 ${ok}，已在清單裡 ${skipped}，失敗 ${failed}`;
     if (pinStop) {
-      setStatus("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。", true);
-    } else if (elitesandStopRequested) {
-      setStatus(`已停止送出。${done}。已進 Elitesand 的歌可直接在那邊唱。`, failed > 0);
-    } else if (failed && ok + skipped === 0) {
-      setStatus(`送到 Elitesand 失敗。${done}。請確認 Elitesand 還開著，且這台電腦就是跑 Elitesand 的那台。`, true);
+      setStatus("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。失敗的歌在表格上方。", true);
     } else {
-      setStatus(`已交給 Elitesand 下載。${done}。音檔由 Elitesand 自己抓，請到 Elitesand 看進度。`, failed > 0);
+      const done = `成功 ${ok}，已在清單裡 ${skipped}，失敗 ${failed}。`;
+      const prefix = elitesandStopRequested
+        ? `已停止送出。${done}`
+        : `已交給 Elitesand 下載。${done}`;
+      finishWithFails(prefix, sendFailedSongs());
     }
   } finally {
     elitesandSending = false;
@@ -1072,6 +1159,19 @@ document.getElementById("copy").addEventListener("click", async () => {
   const previous = button.textContent;
   button.textContent = "已複製";
   setTimeout(() => { button.textContent = previous; }, 1200);
+});
+
+filterYtFail.addEventListener("click", () => {
+  failFilter = failFilter === "yt" ? "" : "yt";
+  filterYtFail.setAttribute("aria-pressed", failFilter === "yt" ? "true" : "false");
+  filterEsFail.setAttribute("aria-pressed", "false");
+  render();
+});
+filterEsFail.addEventListener("click", () => {
+  failFilter = failFilter === "es" ? "" : "es";
+  filterEsFail.setAttribute("aria-pressed", failFilter === "es" ? "true" : "false");
+  filterYtFail.setAttribute("aria-pressed", "false");
+  render();
 });
 
 q.addEventListener("input", render);
