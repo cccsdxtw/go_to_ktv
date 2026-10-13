@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.5.1"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -294,6 +294,105 @@ def find_ytdlp():
     return None
 
 
+COOKIE_BROWSERS = ("chrome", "edge", "firefox", "brave", "chromium", "opera", "safari")
+BOT_ERROR_RE = re.compile(
+    r"sign in to confirm|not a bot|login required|cookies?-from-browser|--cookies|use --cookies",
+    re.I,
+)
+COOKIE_LOCK_RE = re.compile(
+    r"could not copy|database is locked|failed to load cookies|unable to find|no such file",
+    re.I,
+)
+_working_ytdlp = {"browser": None, "extractor": None}
+
+
+def reset_ytdlp_auth():
+    _working_ytdlp["browser"] = None
+    _working_ytdlp["extractor"] = None
+
+
+def normalize_browser(value):
+    name = str(value or "").strip().lower().replace(" ", "-")
+    aliases = {
+        "msedge": "edge",
+        "microsoft-edge": "edge",
+        "google-chrome": "chrome",
+        "googlechrome": "chrome",
+    }
+    name = aliases.get(name, name)
+    return name if name in COOKIE_BROWSERS else ""
+
+
+def ytdlp_output_text(completed):
+    return ((getattr(completed, "stderr", None) or "") + "\n" + (getattr(completed, "stdout", None) or "")).strip()
+
+
+def is_bot_block(text):
+    return bool(BOT_ERROR_RE.search(text or ""))
+
+
+def friendly_download_error(text, tried_cookies=False):
+    if is_bot_block(text) or tried_cookies:
+        return (
+            "YouTube 把下載當成機器人擋住了。"
+            "請先在 Chrome 或 Edge 打開 youtube.com 並登入，上面選好瀏覽器再按一次「下載全部音檔」。"
+            "驗證過後會自動整批存到這台電腦，不用一首一首另存。"
+        )
+    detail = (text or "").strip().splitlines()
+    return (detail[-1] if detail else "音檔下載失敗。")[:240]
+
+
+def cookie_attempt_order(preferred=""):
+    ordered = []
+    for name in (
+        preferred,
+        os.environ.get("GO_TO_KTV_BROWSER", ""),
+        _working_ytdlp.get("browser"),
+        "chrome",
+        "edge",
+        "firefox",
+        "brave",
+    ):
+        name = normalize_browser(name)
+        if name and name not in ordered:
+            ordered.append(name)
+    return ordered
+
+
+def run_ytdlp(command, timeout, cookie_browser=None, extractor=None):
+    cmd = list(command)
+    if extractor:
+        cmd.extend(["--extractor-args", extractor])
+    if cookie_browser:
+        cmd.extend(["--cookies-from-browser", cookie_browser])
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def download_attempts(preferred_browser=""):
+    attempts = []
+    working = (_working_ytdlp.get("browser"), _working_ytdlp.get("extractor"))
+    if working[0] or working[1]:
+        attempts.append(working)
+    attempts.append((None, "youtube:player_client=android,ios"))
+    for browser in cookie_attempt_order(preferred_browser):
+        attempts.append((browser, "youtube:player_client=android,ios"))
+        attempts.append((browser, None))
+    unique = []
+    seen = set()
+    for item in attempts:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
+
+
 def build_search_query(title, artist):
     title = re.sub(r"\s+", " ", str(title or "")).strip()
     artist = re.sub(r"\s+", " ", str(artist or "")).strip()
@@ -481,7 +580,7 @@ def produced_audio_file(video_id):
     return matches[0]
 
 
-def download_youtube_audio(raw_url, title, artist):
+def download_youtube_audio(raw_url, title, artist, browser=""):
     ytdlp = find_ytdlp()
     if not ytdlp:
         raise SongListError("找不到 yt-dlp。請先執行：pip install yt-dlp")
@@ -511,23 +610,45 @@ def download_youtube_audio(raw_url, title, artist):
         command.extend(["-x", "--audio-format", "mp3", "--audio-quality", "0"])
     else:
         command.extend(["-f", "bestaudio[ext=m4a]/bestaudio/best", "--no-keep-video"])
-    try:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=DOWNLOAD_TIMEOUT_SEC,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise SongListError("音檔下載逾時，請稍後再試。") from error
-    except OSError as error:
-        raise SongListError("無法啟動 yt-dlp。") from error
-    produced = produced_audio_file(video_id)
-    if completed.returncode != 0 or not produced:
-        detail = (completed.stderr or completed.stdout or "").strip().splitlines()
-        message = detail[-1] if detail else "音檔下載失敗。"
-        raise SongListError(message[:240])
+
+    produced = None
+    last_text = ""
+    tried_cookies = False
+    used_browser = None
+    used_extractor = None
+    for cookie_browser, extractor in download_attempts(browser):
+        try:
+            completed = run_ytdlp(
+                command,
+                DOWNLOAD_TIMEOUT_SEC,
+                cookie_browser=cookie_browser,
+                extractor=extractor,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise SongListError("音檔下載逾時，請稍後再試。") from error
+        except OSError as error:
+            raise SongListError("無法啟動 yt-dlp。") from error
+        last_text = ytdlp_output_text(completed)
+        produced = produced_audio_file(video_id)
+        if completed.returncode == 0 and produced:
+            used_browser = cookie_browser
+            used_extractor = extractor
+            _working_ytdlp["browser"] = cookie_browser
+            _working_ytdlp["extractor"] = extractor
+            break
+        produced = None
+        if cookie_browser:
+            tried_cookies = True
+        if (
+            completed.returncode != 0
+            and not is_bot_block(last_text)
+            and not COOKIE_LOCK_RE.search(last_text or "")
+        ):
+            # 不是機器人／Cookie 問題就不要把每種瀏覽器都試一遍
+            if cookie_browser:
+                break
+    if not produced:
+        raise SongListError(friendly_download_error(last_text, tried_cookies))
     try:
         produced.replace(final_path)
     except OSError:
@@ -541,6 +662,8 @@ def download_youtube_audio(raw_url, title, artist):
         "skipped": False,
         "videoId": video_id,
         "format": ext.lstrip("."),
+        "cookieBrowser": used_browser or "",
+        "extractor": used_extractor or "",
     }
 
 
@@ -630,6 +753,7 @@ class Handler(BaseHTTPRequestHandler):
                     incoming.get("url"),
                     incoming.get("title"),
                     incoming.get("artist"),
+                    incoming.get("browser"),
                 )
             except SongListError as error:
                 self.respond_json(400, {"error": str(error)})
