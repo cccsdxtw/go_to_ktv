@@ -5,9 +5,11 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,7 +23,7 @@ HOST = os.environ.get("GO_TO_KTV_HOST", "0.0.0.0").strip() or "0.0.0.0"
 PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
-APP_VERSION = "0.4.3"
+APP_VERSION = "0.4.4"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{2,40}$")
 PAGE_PATH_RE = re.compile(r"^/t/([A-Za-z0-9_]{2,40})(?:/songs)?/?$")
@@ -480,15 +482,99 @@ def local_ips():
     return sorted(names)
 
 
+def pids_listening(port):
+    pids = set()
+    me = os.getpid()
+    parent = os.getppid()
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["netstat", "-ano", "-p", "tcp"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        needle = f":{port}"
+        for line in (completed.stdout or "").splitlines():
+            if "LISTENING" not in line.upper() or needle not in line:
+                continue
+            parts = line.split()
+            if not parts:
+                continue
+            try:
+                pid = int(parts[-1])
+            except ValueError:
+                continue
+            if pid not in {0, me, parent}:
+                pids.add(pid)
+        return sorted(pids)
+    completed = subprocess.run(
+        ["lsof", "-ti", f"tcp:{port}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    for raw in (completed.stdout or "").split():
+        try:
+            pid = int(raw)
+        except ValueError:
+            continue
+        if pid not in {me, parent}:
+            pids.add(pid)
+    return sorted(pids)
+
+
+def ask_close_old(pids, port):
+    names = "、".join(str(pid) for pid in pids)
+    message = (
+        f"埠 {port} 還被舊程式佔用（PID {names}）。\n\n"
+        "這通常是之前的「哈娜比77 歌單」還在背景跑。\n\n"
+        "要關掉舊程式，改開新版「歌單轉入」嗎？"
+    )
+    print(message.replace("\n\n", "\n"), flush=True)
+    if os.name == "nt":
+        try:
+            import ctypes
+            # MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND
+            result = ctypes.windll.user32.MessageBoxW(0, message, "歌單轉入", 4 | 32 | 0x10000)
+            return result == 6
+        except Exception:
+            return True
+    return True
+
+
+def stop_pids(pids):
+    for pid in pids:
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/F", "/PID", str(pid)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            else:
+                os.kill(pid, signal.SIGTERM)
+            print(f"已結束舊程式 PID {pid}", flush=True)
+        except OSError as error:
+            print(f"無法結束 PID {pid}：{error}", flush=True)
+
+
 def bind_server(host, start_port, tries=20):
+    occupants = pids_listening(start_port)
+    if occupants:
+        if ask_close_old(occupants, start_port):
+            stop_pids(occupants)
+            time.sleep(0.8)
+        else:
+            print("已略過關閉舊程式，改試其他埠。", flush=True)
     last_error = None
     for port in range(start_port, start_port + tries):
         try:
             server = ThreadingHTTPServer((host, port), Handler)
             if port != start_port:
-                print(f"注意：{start_port} 已被占用（多半是舊的歌單程式還在跑）。", flush=True)
-                print("已改用新埠，請看新開的分頁，不要再用舊的 8765。", flush=True)
-                print("可在工作管理員結束 python.exe 後，下次就會回到 8765。", flush=True)
+                print(f"注意：{start_port} 仍被占用，已改用 {port}。", flush=True)
             return server, port
         except OSError as error:
             last_error = error
