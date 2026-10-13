@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.6.0")
+        self.assertEqual(server.APP_VERSION, "0.6.1")
 
 
 class FakeResponse:
@@ -234,7 +234,7 @@ class ElitesandProxyTests(unittest.TestCase):
         def fake_urlopen(request, timeout=0):
             calls.append(request.full_url)
             if request.full_url.endswith(":3001/api/health"):
-                return FakeResponse({"status": "ok", "version": "1.2.3", "port": 3001})
+                return FakeResponse({"status": "ok", "version": "1.2.3", "port": 3001, "timestamp": 1})
             raise urllib.error.URLError("offline")
 
         with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": ""}, clear=False), mock.patch.object(
@@ -249,7 +249,7 @@ class ElitesandProxyTests(unittest.TestCase):
     def test_find_override(self):
         def fake_urlopen(request, timeout=0):
             if request.full_url == "http://127.0.0.1:3999/api/health":
-                return FakeResponse({"ok": True, "version": "dev"})
+                return FakeResponse({"status": "ok", "version": "dev", "port": 3999, "timestamp": 1})
             raise urllib.error.URLError("offline")
 
         with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": "http://127.0.0.1:3999"}, clear=False), mock.patch.object(
@@ -312,6 +312,34 @@ class ElitesandProxyTests(unittest.TestCase):
             with self.assertRaises(server.SongListError) as ctx:
                 server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E")
         self.assertIn("PIN", str(ctx.exception))
+
+    def test_skip_mock_and_our_health(self):
+        def fake_urlopen(request, timeout=0):
+            if request.full_url.endswith(":3000/api/health"):
+                return FakeResponse({"status": "ok", "version": "mock", "port": 3000, "timestamp": 1})
+            if request.full_url.endswith(":3001/api/health"):
+                return FakeResponse({"ok": True, "ytdlp": True, "version": "0.6.1", "audioDir": "/tmp"})
+            if request.full_url.endswith(":3002/api/health"):
+                return FakeResponse({"status": "ok", "version": "5.1.0", "port": 3002, "timestamp": 9})
+            raise urllib.error.URLError("offline")
+
+        with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": ""}, clear=False), mock.patch.object(
+            server.urllib.request, "urlopen", side_effect=fake_urlopen
+        ):
+            found = server.find_elitesand()
+        self.assertEqual(found["base"], "http://127.0.0.1:3002")
+        self.assertEqual(found["version"], "5.1.0")
+
+    def test_import_rejects_stub_track(self):
+        def fake_urlopen(request, timeout=0):
+            return FakeResponse({"success": True, "track": {"title": "mock track", "filename": "mock.mp3"}})
+
+        with mock.patch.object(
+            server, "find_elitesand", return_value={"ok": True, "base": "http://127.0.0.1:3000"}
+        ), mock.patch.object(server.urllib.request, "urlopen", side_effect=fake_urlopen):
+            with self.assertRaises(server.SongListError) as ctx:
+                server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E")
+        self.assertIn("不是 Elitesand", str(ctx.exception))
 
 
 if __name__ == "__main__":
