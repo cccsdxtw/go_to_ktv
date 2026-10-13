@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""網頁工具：貼上 StreamerSonglist 歌單網址，把歌抓回使用者的瀏覽器。"""
+"""網頁工具：貼上 StreamerSonglist 歌單網址，或從表格轉成 Elitesand 歌單。"""
 
 import json
 import re
+import shutil
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,6 +21,7 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{2,40}$")
 PAGE_PATH_RE = re.compile(r"^/t/([A-Za-z0-9_]{2,40})(?:/songs)?/?$")
 MAX_PAGES = 80
 MAX_SONGS = 5000
+YTDLP_TIMEOUT_SEC = 45
 
 HOLE = -1
 NAN = -2
@@ -262,6 +265,92 @@ def fetch_songs(username):
     }
 
 
+def find_ytdlp():
+    found = shutil.which("yt-dlp")
+    if found:
+        return found
+    local = Path.home() / ".local" / "bin" / "yt-dlp"
+    if local.is_file():
+        return str(local)
+    return None
+
+
+def build_search_query(title, artist):
+    title = re.sub(r"\s+", " ", str(title or "")).strip()
+    artist = re.sub(r"\s+", " ", str(artist or "")).strip()
+    if not title:
+        raise SongListError("缺少歌名，無法搜尋。")
+    query = f"{title} {artist}".strip() if artist else title
+    return query[:180]
+
+
+def search_youtube(title, artist):
+    ytdlp = find_ytdlp()
+    if not ytdlp:
+        raise SongListError("找不到 yt-dlp。請先執行：pip install yt-dlp")
+    query = build_search_query(title, artist)
+    command = [
+        ytdlp,
+        f"ytsearch1:{query}",
+        "--flat-playlist",
+        "--dump-single-json",
+        "--no-warnings",
+        "--skip-download",
+        "--no-playlist",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=YTDLP_TIMEOUT_SEC,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise SongListError("YouTube 搜尋逾時，請稍後再試。") from error
+    except OSError as error:
+        raise SongListError("無法啟動 yt-dlp。") from error
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip().splitlines()
+        message = detail[-1] if detail else "YouTube 搜尋失敗。"
+        raise SongListError(message[:240])
+    try:
+        payload = json.loads(completed.stdout or "{}")
+    except json.JSONDecodeError as error:
+        raise SongListError("YouTube 搜尋結果無法讀取。") from error
+    entries = payload.get("entries") if isinstance(payload, dict) else None
+    if isinstance(entries, list) and entries:
+        item = entries[0]
+    elif isinstance(payload, dict) and payload.get("id"):
+        item = payload
+    else:
+        raise SongListError("找不到這首歌的 YouTube 結果。")
+    if not isinstance(item, dict) or not item.get("id"):
+        raise SongListError("找不到這首歌的 YouTube 結果。")
+    video_id = str(item["id"])
+    return {
+        "videoId": video_id,
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+        "youtubeTitle": item.get("title") or "",
+        "uploader": item.get("uploader") or item.get("channel") or "",
+        "duration": item.get("duration"),
+        "query": query,
+    }
+
+
+def read_json_body(handler, max_length, empty_error):
+    length = int(handler.headers.get("Content-Length") or "0")
+    if length <= 0 or length > max_length:
+        raise SongListError(empty_error)
+    try:
+        incoming = json.loads(handler.rfile.read(length).decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise SongListError(empty_error) from error
+    if not isinstance(incoming, dict):
+        raise SongListError(empty_error)
+    return incoming
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
@@ -276,33 +365,44 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if path == "/api/health":
+            ytdlp = find_ytdlp()
+            self.respond_json(
+                200,
+                {
+                    "ok": True,
+                    "ytdlp": bool(ytdlp),
+                    "ytdlpPath": ytdlp,
+                    "version": "0.3.0",
+                },
+            )
+            return
         self.send_error(404)
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
-        if path != "/api/songs":
-            self.send_error(404)
+        if path == "/api/songs":
+            try:
+                incoming = read_json_body(self, 4000, "請貼上歌單網址。")
+                username = parse_username(incoming.get("url"))
+                result = fetch_songs(username)
+            except SongListError as error:
+                self.respond_json(400, {"error": str(error)})
+                return
+            print(f"{username}: {len(result['songs'])} songs", flush=True)
+            self.respond_json(200, result)
             return
-        length = int(self.headers.get("Content-Length") or "0")
-        if length <= 0 or length > 4000:
-            self.respond_json(400, {"error": "請貼上歌單網址。"})
+        if path == "/api/youtube-search":
+            try:
+                incoming = read_json_body(self, 8000, "請提供歌名。")
+                result = search_youtube(incoming.get("title"), incoming.get("artist"))
+            except SongListError as error:
+                self.respond_json(400, {"error": str(error)})
+                return
+            print(f"yt: {result['query']} -> {result['videoId']}", flush=True)
+            self.respond_json(200, result)
             return
-        try:
-            incoming = json.loads(self.rfile.read(length).decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            self.respond_json(400, {"error": "請貼上歌單網址。"})
-            return
-        if not isinstance(incoming, dict):
-            self.respond_json(400, {"error": "請貼上歌單網址。"})
-            return
-        try:
-            username = parse_username(incoming.get("url"))
-            result = fetch_songs(username)
-        except SongListError as error:
-            self.respond_json(400, {"error": str(error)})
-            return
-        print(f"{username}: {len(result['songs'])} songs", flush=True)
-        self.respond_json(200, result)
+        self.send_error(404)
 
     def respond_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -317,6 +417,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    ytdlp = find_ytdlp()
+    if ytdlp:
+        print(f"yt-dlp: {ytdlp}", flush=True)
+    else:
+        print("提醒：尚未找到 yt-dlp，YouTube 搜尋會失敗。請執行 pip install yt-dlp", flush=True)
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"打開 http://{HOST}:{PORT}", flush=True)
     server.serve_forever()

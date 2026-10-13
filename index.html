@@ -153,7 +153,7 @@
 <body>
 <header>
   <h1>歌單轉入</h1>
-  <p class="lead">可以從 StreamerSonglist 網址抓歌，也可以帶 CSV／試算表進來，再轉成 Elitesand Pro 要的歌單。</p>
+  <p class="lead">可以從 StreamerSonglist 網址抓歌，也可以帶 CSV／試算表進來；再搜 YouTube 網址，轉成 Elitesand Pro 能抓音訊的歌單。</p>
 </header>
 <main>
   <div class="sources">
@@ -189,6 +189,8 @@
       <div class="actions">
         <button class="ghost" id="copy" type="button">複製到試算表</button>
         <button class="ghost" id="download" type="button">下載 CSV</button>
+        <button class="ghost" id="youtube-search" type="button">搜尋 YouTube</button>
+        <button class="ghost" id="youtube-stop" type="button" hidden>停止搜尋</button>
         <button class="primary" id="download-elitesand" type="button">下載 Elitesand 歌單</button>
       </div>
     </div>
@@ -204,6 +206,7 @@
             <th>標題</th>
             <th>歌手</th>
             <th>屬性</th>
+            <th>YouTube</th>
             <th>上次播放</th>
             <th class="num">播放次數</th>
           </tr>
@@ -211,10 +214,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note">Elitesand Pro 的匯入不會開檔案視窗，只列出這個資料夾裡的 json。請把下載的檔案放到 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾還沒有就先建一個。放進去之後，在程式裡按匯入，選這份歌單。清單帶的是歌名和歌手；要播出來，還得在 Elitesand 裡加上 YouTube 連結或本機音檔。</p>
+    <p class="import-note">先按「搜尋 YouTube」幫目前畫面上的歌找網址，再下載 Elitesand 歌單。Elitesand Pro 匯入不會開檔案視窗，只列出 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾沒有就先建，放進 json 後在程式裡匯入。搜尋需要本機已安裝 <code>yt-dlp</code>（<code>pip install yt-dlp</code>）。結果可能對到翻唱或錯版本，匯入前請看一下。</p>
   </section>
 </main>
-<footer>網址來源只讀 streamersonglist.com 公開歌單。表格來源在你自己的瀏覽器解析，不會上傳檔案內容。版本 v0.2.0。</footer>
+<footer>網址來源只讀 streamersonglist.com 公開歌單。表格來源在瀏覽器解析。YouTube 搜尋走本機 yt-dlp。版本 v0.3.0。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -222,12 +225,16 @@ const fetchButton = document.getElementById("fetch");
 const sheetText = document.getElementById("sheet-text");
 const sheetFile = document.getElementById("sheet-file");
 const sheetParse = document.getElementById("sheet-parse");
+const youtubeSearchButton = document.getElementById("youtube-search");
+const youtubeStopButton = document.getElementById("youtube-stop");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const q = document.getElementById("q");
 const chipsEl = document.getElementById("chips");
 const rowsEl = document.getElementById("rows");
 const shownEl = document.getElementById("shown");
+let youtubeSearching = false;
+let youtubeStopRequested = false;
 
 const TITLE_ALIASES = new Set(["標題", "歌名", "歌曲", "曲名", "title", "song", "song title", "name", "曲目"]);
 const ARTIST_ALIASES = new Set(["歌手", "藝術家", "演唱", "演唱者", "artist", "singer", "performer"]);
@@ -460,12 +467,37 @@ function visibleSongs() {
   });
 }
 
+function youtubeCell(song) {
+  const td = document.createElement("td");
+  if (song.youtubeUrl) {
+    const link = document.createElement("a");
+    link.href = song.youtubeUrl;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.textContent = song.youtubeTitle || "已找到";
+    link.title = song.youtubeTitle || song.youtubeUrl;
+    td.appendChild(link);
+    return td;
+  }
+  if (song.youtubeError) {
+    td.textContent = song.youtubeError;
+    td.style.color = "var(--danger)";
+    return td;
+  }
+  td.textContent = "尚未搜尋";
+  td.style.color = "var(--muted)";
+  return td;
+}
+
 function render() {
   const list = visibleSongs();
   const total = current ? current.songs.length : 0;
-  shownEl.textContent = list.length === total ? `顯示 ${list.length} 首` : `顯示 ${list.length} / ${total} 首`;
+  const withUrl = current ? current.songs.filter((song) => song.youtubeUrl).length : 0;
+  shownEl.textContent = list.length === total
+    ? `顯示 ${list.length} 首 · YouTube ${withUrl}`
+    : `顯示 ${list.length} / ${total} 首 · YouTube ${withUrl}`;
   if (!list.length) {
-    rowsEl.innerHTML = '<tr><td class="empty" colspan="5">沒有符合的歌。</td></tr>';
+    rowsEl.innerHTML = '<tr><td class="empty" colspan="6">沒有符合的歌。</td></tr>';
     return;
   }
   rowsEl.replaceChildren(...list.map((song) => {
@@ -474,6 +506,7 @@ function render() {
       cell(song.title),
       cell(song.artist || ""),
       tags(song.attributes || []),
+      youtubeCell(song),
       cell(song.lastPlayed || "尚未播放"),
       cell(String(song.timesPlayed || 0), true)
     );
@@ -509,11 +542,12 @@ function csvEscape(value) {
 }
 
 function toCsv(list) {
-  const header = ["標題", "歌手", "屬性", "上次播放", "播放次數"];
+  const header = ["標題", "歌手", "屬性", "YouTube", "上次播放", "播放次數"];
   const lines = [header, ...list.map((song) => [
     song.title,
     song.artist,
     (song.attributes || []).join("、"),
+    song.youtubeUrl || "",
     song.lastPlayed || "",
     song.timesPlayed || 0
   ])];
@@ -521,11 +555,12 @@ function toCsv(list) {
 }
 
 function toTsv(list) {
-  const header = ["標題", "歌手", "屬性", "上次播放", "播放次數"];
+  const header = ["標題", "歌手", "屬性", "YouTube", "上次播放", "播放次數"];
   const lines = [header, ...list.map((song) => [
     song.title,
     song.artist,
     (song.attributes || []).join("、"),
+    song.youtubeUrl || "",
     song.lastPlayed || "",
     String(song.timesPlayed || 0)
   ])];
@@ -552,24 +587,91 @@ function elitesandFilename() {
 }
 
 function elitesandDocument(list) {
-  const source = current.sourceKind === "sheet" ? "spreadsheet" : "streamersonglist";
+  const fallbackSource = current.sourceKind === "sheet" ? "spreadsheet" : "streamersonglist";
   const prefix = current.sourceKind === "sheet" ? "sheet" : "ssl";
   return {
     version: "5.0",
     timestamp: Date.now(),
     currentTrackIndex: -1,
-    playlist: list.map((song, index) => ({
-      id: song.id ? String(song.id).startsWith("ssl-") || String(song.id).startsWith("sheet-")
-        ? String(song.id)
-        : `${prefix}-${song.id}` : `${prefix}-${index + 1}`,
-      title: song.title,
-      artist: song.artist || "",
-      artistConfidence: song.artist ? 1 : 0,
-      needsArtistConfirmation: !song.artist,
-      source
-    }))
+    playlist: list.map((song, index) => {
+      const hasYoutube = Boolean(song.youtubeUrl && song.videoId);
+      const fallbackId = song.id
+        ? (String(song.id).startsWith("ssl-") || String(song.id).startsWith("sheet-")
+          ? String(song.id)
+          : `${prefix}-${song.id}`)
+        : `${prefix}-${index + 1}`;
+      const track = {
+        id: hasYoutube ? song.videoId : fallbackId,
+        title: song.title,
+        artist: song.artist || "",
+        artistConfidence: song.artist ? 1 : 0,
+        needsArtistConfirmation: !song.artist,
+        source: hasYoutube ? "youtube" : fallbackSource
+      };
+      if (hasYoutube) track.url = song.youtubeUrl;
+      return track;
+    })
   };
 }
+
+async function searchOneYoutube(song) {
+  const response = await fetch("/api/youtube-search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: song.title, artist: song.artist || "" })
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "搜尋失敗。");
+  song.youtubeUrl = payload.url;
+  song.videoId = payload.videoId;
+  song.youtubeTitle = payload.youtubeTitle || "";
+  song.youtubeUploader = payload.uploader || "";
+  song.youtubeError = "";
+}
+
+youtubeSearchButton.addEventListener("click", async () => {
+  if (!current || youtubeSearching) return;
+  const targets = visibleSongs().filter((song) => !song.youtubeUrl);
+  if (!targets.length) {
+    setStatus("目前畫面上的歌都已經有 YouTube 網址。", false);
+    return;
+  }
+  youtubeSearching = true;
+  youtubeStopRequested = false;
+  youtubeSearchButton.disabled = true;
+  youtubeStopButton.hidden = false;
+  let ok = 0;
+  let failed = 0;
+  try {
+    for (let i = 0; i < targets.length; i++) {
+      if (youtubeStopRequested) break;
+      const song = targets[i];
+      setStatus(`正在搜尋 YouTube ${i + 1}/${targets.length}：${song.title}`, false);
+      try {
+        await searchOneYoutube(song);
+        ok += 1;
+      } catch (error) {
+        song.youtubeError = error.message || "搜尋失敗";
+        failed += 1;
+      }
+      render();
+    }
+    if (youtubeStopRequested) {
+      setStatus(`已停止。成功 ${ok}，失敗 ${failed}。`, failed > 0);
+    } else {
+      setStatus(`YouTube 搜尋完成。成功 ${ok}，失敗 ${failed}。`, failed > 0 && ok === 0);
+    }
+  } finally {
+    youtubeSearching = false;
+    youtubeSearchButton.disabled = false;
+    youtubeStopButton.hidden = true;
+  }
+});
+
+youtubeStopButton.addEventListener("click", () => {
+  youtubeStopRequested = true;
+  setStatus("正在停止搜尋…", false);
+});
 
 document.getElementById("download").addEventListener("click", () => {
   if (!current) return;
