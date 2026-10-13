@@ -1167,13 +1167,14 @@ async function refreshElitesandStatus() {
   try {
     const response = await fetch("/api/elitesand-status", { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
-    if (payload && payload.ok && payload.base) {
-      const ver = payload.version ? `（版本 ${payload.version}）` : "";
-      elitesandStatusEl.innerHTML = `已連上 Elitesand${ver} <a href="${payload.base}" target="_blank" rel="noreferrer">${payload.base}</a>`;
+    const version = String(payload && payload.version || "");
+    const real = payload && payload.ok && payload.base && /^\d+\.\d+/.test(version) && version.toLowerCase() !== "mock";
+    if (real) {
+      elitesandStatusEl.innerHTML = `已連上 Elitesand Pro ${version}（<a href="${payload.base}" target="_blank" rel="noreferrer">${payload.base}</a>）`;
       return true;
     }
   } catch (_) { /* ignore */ }
-  elitesandStatusEl.textContent = "找不到 Elitesand。請先在這台電腦打開 Elitesand Pro（預設埠 3000；若被占用會在 3001–3010）。";
+  elitesandStatusEl.textContent = "找不到 Elitesand Pro。請先打開它；會認它自己的健康檢查與 /api/obs-launcher，略過假的 3000 服務。";
   return false;
 }
 
