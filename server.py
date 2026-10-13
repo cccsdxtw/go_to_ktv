@@ -2,8 +2,10 @@
 """網頁工具：貼上 StreamerSonglist 歌單網址，或從表格轉成 Elitesand 歌單。"""
 
 import json
+import os
 import re
 import shutil
+import socket
 import subprocess
 import urllib.error
 import urllib.parse
@@ -12,10 +14,12 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-HOST = "127.0.0.1"
-PORT = 8765
+# 0.0.0.0：本機與遠端都能連；若只想本機可設 GO_TO_KTV_HOST=127.0.0.1
+HOST = os.environ.get("GO_TO_KTV_HOST", "0.0.0.0").strip() or "0.0.0.0"
+PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
+APP_VERSION = "0.3.2"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{2,40}$")
 PAGE_PATH_RE = re.compile(r"^/t/([A-Za-z0-9_]{2,40})(?:/songs)?/?$")
@@ -413,7 +417,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "ytdlp": bool(ytdlp),
                     "ytdlpPath": ytdlp,
-                    "version": "0.3.1",
+                    "version": APP_VERSION,
                 },
             )
             return
@@ -456,6 +460,23 @@ class Handler(BaseHTTPRequestHandler):
         print(f"{self.address_string()} {fmt % args}", flush=True)
 
 
+def local_ips():
+    names = {"127.0.0.1"}
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            names.add(info[4][0])
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            names.add(sock.getsockname()[0])
+    except OSError:
+        pass
+    return sorted(names)
+
+
 def main():
     ytdlp = find_ytdlp()
     if ytdlp:
@@ -463,7 +484,12 @@ def main():
     else:
         print("提醒：尚未找到 yt-dlp，YouTube 搜尋會失敗。請執行 pip install yt-dlp", flush=True)
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"打開 http://{HOST}:{PORT}", flush=True)
+    print(f"監聽 {HOST}:{PORT}（v{APP_VERSION}）", flush=True)
+    print(f"本機打開 http://127.0.0.1:{PORT}", flush=True)
+    if HOST in {"0.0.0.0", "::"}:
+        for ip in local_ips():
+            if ip != "127.0.0.1":
+                print(f"遠端／區網可試 http://{ip}:{PORT}", flush=True)
     server.serve_forever()
 
 
