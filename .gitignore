@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+啟動記錄.txt
+.DS_Store

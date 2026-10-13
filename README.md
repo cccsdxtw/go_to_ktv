@@ -1,6 +1,6 @@
 # go_to_ktv
 
-把歌單轉成 Elitesand Pro 可匯入的格式。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube **伴奏**網址。版本 **v0.4.0**。
+把歌單轉成 Elitesand Pro 可匯入的格式。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube **伴奏**網址。版本 **v0.4.1**。
 
 ## 怎麼用（建議）
 
@@ -8,11 +8,11 @@
 
 1. 安裝一次 [Python](https://www.python.org/downloads/)（Windows 請勾選 Add to PATH）
 2. 雙擊：
-   - Windows：`開始.bat`
+   - Windows：`開始.bat`（若中文檔名有問題，可改雙擊 `start.bat`）
    - Mac：`開始.command`（若不能執行，終端機跑一次 `chmod +x 開始.command`）
-3. 瀏覽器會自動打開
+3. 瀏覽器會自動打開；黑色／終端機視窗要留著，用完再關
 
-用完關掉黑色／終端機視窗即可。
+若視窗一閃就關掉：再雙擊一次，看同資料夾有沒有 `啟動記錄.txt`，裡面會寫原因（多半是還沒裝 Python，或沒勾 PATH）。
 
 > 不要只雙擊 `index.html`。網址抓歌與 YouTube 搜尋需要背景小伺服器；「開始」會幫你開好。
 
