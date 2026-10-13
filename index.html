@@ -90,6 +90,7 @@
     color: var(--text);
     border: 1px solid var(--line);
   }
+  button[hidden], label[hidden] { display: none !important; }
   button:disabled { opacity: 0.55; cursor: wait; }
   input[type="file"] { display: none; }
   .status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
@@ -170,8 +171,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.4.4</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可從網址抓歌、貼 CSV／試算表，再搜 YouTube 伴奏轉成 Elitesand 歌單。若 8765 被舊程式佔用，會跳出視窗問你要不要關掉。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.0</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，再「下載全部音檔」一次抓好，把整個資料夾拖進 Elitesand。歌單 json 只帶歌名／網址，Elitesand 匯入本身不會下載。若 8765 被舊程式佔用，會跳出視窗問你要不要關掉。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -210,7 +211,11 @@
         <button class="ghost" id="download" type="button">下載 CSV</button>
         <button class="ghost" id="youtube-search" type="button">搜尋 YouTube</button>
         <button class="ghost" id="youtube-stop" type="button" hidden>停止搜尋</button>
-        <button class="primary" id="download-elitesand" type="button">下載 Elitesand 歌單</button>
+        <button class="ghost" id="copy-youtube" type="button">複製全部 YouTube 網址</button>
+        <button class="primary" id="download-audio" type="button">下載全部音檔</button>
+        <button class="ghost" id="audio-stop" type="button" hidden>停止下載</button>
+        <button class="ghost" id="open-audio-folder" type="button">開啟音檔資料夾</button>
+        <button class="ghost" id="download-elitesand" type="button">下載 Elitesand 歌單</button>
       </div>
     </div>
     <div class="toolbar">
@@ -226,6 +231,7 @@
             <th>歌手</th>
             <th>屬性</th>
             <th>YouTube</th>
+            <th>音檔</th>
             <th>上次播放</th>
             <th class="num">播放次數</th>
           </tr>
@@ -233,10 +239,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note">先按「搜尋 YouTube」幫目前畫面上的歌找<strong>伴奏</strong>網址（搜尋會帶「伴奏」），再下載 Elitesand 歌單。Elitesand Pro 匯入不會開檔案視窗，只列出 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾沒有就先建，放進 json 後在程式裡匯入。搜尋需要本機已安裝 <code>yt-dlp</code>（<code>pip install yt-dlp</code>）。結果仍可能對到錯版本，匯入前請看一下。</p>
+    <p class="import-note"><strong>不用一首一首點。</strong>Elitesand 的「匯入歌單」只會帶入歌名與 YouTube 網址，不會幫你下載音檔，所以才會顯示音檔遺失。正確流程：① 搜尋 YouTube ② 按「下載全部音檔」（本機一次排程抓好）③ 按「開啟音檔資料夾」，把裡面的 mp3／m4a <strong>一次拖進</strong> Elitesand 右邊「本機檔案」區塊。json 歌單仍可當備份；左邊工作區會顯示已抓好的檔名。搜尋與下載都需要 <code>yt-dlp</code>；轉成 mp3 需要本機有 ffmpeg。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋走本機 yt-dlp 並加「伴奏」。版本 v0.4.4。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.0。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -246,6 +252,10 @@ const sheetFile = document.getElementById("sheet-file");
 const sheetParse = document.getElementById("sheet-parse");
 const youtubeSearchButton = document.getElementById("youtube-search");
 const youtubeStopButton = document.getElementById("youtube-stop");
+const copyYoutubeButton = document.getElementById("copy-youtube");
+const downloadAudioButton = document.getElementById("download-audio");
+const audioStopButton = document.getElementById("audio-stop");
+const openAudioFolderButton = document.getElementById("open-audio-folder");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const q = document.getElementById("q");
@@ -254,6 +264,8 @@ const rowsEl = document.getElementById("rows");
 const shownEl = document.getElementById("shown");
 let youtubeSearching = false;
 let youtubeStopRequested = false;
+let audioDownloading = false;
+let audioStopRequested = false;
 
 const TITLE_ALIASES = new Set(["標題", "歌名", "歌曲", "曲名", "title", "song", "song title", "name", "曲目"]);
 const ARTIST_ALIASES = new Set(["歌手", "藝術家", "演唱", "演唱者", "artist", "singer", "performer"]);
@@ -512,6 +524,22 @@ function visibleSongs() {
   });
 }
 
+function audioCell(song) {
+  const td = document.createElement("td");
+  if (song.audioFile) {
+    td.textContent = song.audioFile;
+    return td;
+  }
+  if (song.audioError) {
+    td.textContent = song.audioError;
+    td.style.color = "var(--danger)";
+    return td;
+  }
+  td.textContent = song.youtubeUrl ? "尚未下載" : "—";
+  td.style.color = "var(--muted)";
+  return td;
+}
+
 function youtubeCell(song) {
   const td = document.createElement("td");
   if (song.youtubeUrl) {
@@ -538,11 +566,12 @@ function render() {
   const list = visibleSongs();
   const total = current ? current.songs.length : 0;
   const withUrl = current ? current.songs.filter((song) => song.youtubeUrl).length : 0;
+  const withAudio = current ? current.songs.filter((song) => song.audioFile).length : 0;
   shownEl.textContent = list.length === total
-    ? `顯示 ${list.length} 首 · YouTube ${withUrl}`
-    : `顯示 ${list.length} / ${total} 首 · YouTube ${withUrl}`;
+    ? `顯示 ${list.length} 首 · YouTube ${withUrl} · 音檔 ${withAudio}`
+    : `顯示 ${list.length} / ${total} 首 · YouTube ${withUrl} · 音檔 ${withAudio}`;
   if (!list.length) {
-    rowsEl.innerHTML = '<tr><td class="empty" colspan="6">沒有符合的歌。</td></tr>';
+    rowsEl.innerHTML = '<tr><td class="empty" colspan="7">沒有符合的歌。</td></tr>';
     return;
   }
   rowsEl.replaceChildren(...list.map((song) => {
@@ -552,6 +581,7 @@ function render() {
       cell(song.artist || ""),
       tags(song.attributes || []),
       youtubeCell(song),
+      audioCell(song),
       cell(song.lastPlayed || "尚未播放"),
       cell(String(song.timesPlayed || 0), true)
     );
@@ -654,6 +684,7 @@ function elitesandDocument(list) {
         source: hasYoutube ? "youtube" : fallbackSource
       };
       if (hasYoutube) track.url = song.youtubeUrl;
+      if (song.audioFile) track.filename = song.audioFile;
       return track;
     })
   };
@@ -721,6 +752,105 @@ youtubeSearchButton.addEventListener("click", async () => {
 youtubeStopButton.addEventListener("click", () => {
   youtubeStopRequested = true;
   setStatus("正在停止搜尋…", false);
+});
+
+copyYoutubeButton.addEventListener("click", async () => {
+  if (!current) return;
+  const urls = visibleSongs().map((song) => song.youtubeUrl).filter(Boolean);
+  if (!urls.length) {
+    setStatus("目前畫面上還沒有 YouTube 網址。請先搜尋 YouTube。", true);
+    return;
+  }
+  await navigator.clipboard.writeText(urls.join("\n"));
+  const previous = copyYoutubeButton.textContent;
+  copyYoutubeButton.textContent = `已複製 ${urls.length} 條`;
+  setTimeout(() => { copyYoutubeButton.textContent = previous; }, 1400);
+  setStatus(`已複製 ${urls.length} 條 YouTube 網址。Elitesand 右邊貼單支網址仍是一首一首；要一次下載請改用「下載全部音檔」。`, false);
+});
+
+async function downloadOneAudio(song) {
+  let response;
+  try {
+    response = await fetch("/api/youtube-download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: song.youtubeUrl,
+        title: song.title,
+        artist: song.artist || ""
+      })
+    });
+  } catch (error) {
+    throw new Error(networkErrorMessage(error, "音檔下載"));
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "下載失敗。");
+  song.audioFile = payload.filename;
+  song.audioError = "";
+  song.audioSkipped = Boolean(payload.skipped);
+}
+
+downloadAudioButton.addEventListener("click", async () => {
+  if (!current || audioDownloading) return;
+  const targets = visibleSongs().filter((song) => song.youtubeUrl && !song.audioFile);
+  if (!targets.length) {
+    const missingSearch = visibleSongs().filter((song) => !song.youtubeUrl).length;
+    if (missingSearch) {
+      setStatus("請先按「搜尋 YouTube」找到伴奏網址，再一次下載音檔。", true);
+    } else {
+      setStatus("目前畫面上的歌都已經有音檔。可按「開啟音檔資料夾」一次拖進 Elitesand。", false);
+    }
+    return;
+  }
+  audioDownloading = true;
+  audioStopRequested = false;
+  downloadAudioButton.disabled = true;
+  audioStopButton.hidden = false;
+  let ok = 0;
+  let skipped = 0;
+  let failed = 0;
+  try {
+    for (let i = 0; i < targets.length; i++) {
+      if (audioStopRequested) break;
+      const song = targets[i];
+      setStatus(`正在下載音檔 ${i + 1}/${targets.length}：${song.title}`, false);
+      try {
+        await downloadOneAudio(song);
+        if (song.audioSkipped) skipped += 1;
+        else ok += 1;
+      } catch (error) {
+        song.audioError = error.message || "下載失敗";
+        failed += 1;
+      }
+      render();
+    }
+    const done = `成功 ${ok}，略過已存在 ${skipped}，失敗 ${failed}`;
+    if (audioStopRequested) {
+      setStatus(`已停止下載。${done}。音檔在 elitesand-audio 資料夾，可一次拖進 Elitesand。`, failed > 0);
+    } else {
+      setStatus(`音檔下載完成。${done}。按「開啟音檔資料夾」，把檔案一次拖進 Elitesand 右邊本機檔案。`, failed > 0 && ok + skipped === 0);
+    }
+  } finally {
+    audioDownloading = false;
+    downloadAudioButton.disabled = false;
+    audioStopButton.hidden = true;
+  }
+});
+
+audioStopButton.addEventListener("click", () => {
+  audioStopRequested = true;
+  setStatus("正在停止下載…", false);
+});
+
+openAudioFolderButton.addEventListener("click", async () => {
+  try {
+    const response = await fetch("/api/open-audio-folder", { method: "POST" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "無法打開資料夾。");
+    setStatus(`音檔資料夾：${payload.folder}`, false);
+  } catch (error) {
+    setStatus(networkErrorMessage(error, "開啟資料夾"), true);
+  }
 });
 
 document.getElementById("download").addEventListener("click", () => {
