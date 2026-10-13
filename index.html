@@ -203,8 +203,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.3</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。預設<strong>不讀你的 YouTube 帳號</strong>、也不上傳登入。批量下載若被擋，可另開「下載專用」帳號再勾選；不要用日常主帳號。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.4</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。免登入網站也不是用你的帳號，是伺服器假裝瀏覽器去抓；這裡改成本機模擬 Chrome，<strong>預設不讀你的 Google 帳號</strong>。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -283,10 +283,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>預設不碰你的 YouTube 帳號。</strong>需要登入是 YouTube 在擋機器人，不是這個工具要你的密碼；Cookie 只留在這台電腦，不會上傳。不想用主帳號：另申請一個下載專用 Google 帳號，勾選後再下載。抓好的 mp3 按「開啟音檔資料夾」，一次拖進 Elitesand 右邊本機檔案。</p>
+    <p class="import-note"><strong>那些 YT 下載網頁也不用你的帳號</strong>——是他們的電腦去跟 YouTube 拿。這裡同樣不讀你的 Google 登入，改成本機模擬 Chrome。抓好後按「開啟音檔資料夾」，一次拖進 Elitesand 右邊本機檔案。只有仍然被擋時，才考慮下載專用帳號（不要用日常主帳號）。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.3。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.4。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -898,7 +898,7 @@ downloadAudioButton.addEventListener("click", async () => {
     if (audioStopRequested) {
       setStatus(`已停止下載。${done}。音檔在 elitesand-audio 資料夾，可一次拖進 Elitesand。`, failed > 0);
     } else if (failed && ok + skipped === 0) {
-      setStatus(`音檔下載失敗。${done}。預設不讀你的帳號。若仍要下載，請用下載專用 Google 帳號勾選後再試，不要用日常主帳號。`, true);
+      setStatus(`音檔下載失敗。${done}。已用本機模擬 Chrome（跟免登入網站同一類，不讀你的 Google 帳號）。`, true);
     } else {
       setStatus(`音檔下載完成。${done}。按「開啟音檔資料夾」，把檔案一次拖進 Elitesand 右邊本機檔案。`, failed > 0);
     }
