@@ -1,13 +1,17 @@
 # go_to_ktv
 
-把 StreamerSonglist 公開歌單轉成試算表／CSV，也能做成 Elitesand Pro 可匯入的歌單。版本 **v0.1.0**。
+把歌單轉成 Elitesand Pro 可匯入的格式。也支援匯出／讀入 CSV、試算表。版本 **v0.2.0**。
 
-貼上網址 → 本機網頁幫你抓歌 → 下載到自己的電腦。不預先把別人的歌存進專案。
+兩種進法：
+
+1. 貼上 StreamerSonglist 公開歌單網址，本機幫你抓
+2. 帶 CSV／試算表進來（上傳或貼上），轉成需要的 json
 
 ## 需求
 
 - Python 3.10+
-- 能連到 `streamersonglist.com`
+- 網址抓歌時要能連到 `streamersonglist.com`
+- CSV／試算表轉入只在瀏覽器解析，不用上網
 
 ## 執行
 
@@ -17,11 +21,25 @@ python server.py
 
 瀏覽器打開 http://127.0.0.1:8765
 
-1. 貼上歌單網址，例如 `https://streamersonglist.com/t/名稱/songs`
+### 從網址
+
+1. 貼上 `https://streamersonglist.com/t/名稱/songs`
 2. 按「抓取歌單」
 3. 可搜尋、依屬性篩選
-4. **下載 CSV**／**複製到試算表**：給 Excel、Google 試算表、Numbers
-5. **下載 Elitesand 歌單**：給 [Elitesand Pro](https://z22115554.github.io/elitesand-pro/) 匯入
+4. 下載 CSV／複製到試算表，或下載 Elitesand 歌單
+
+### 從 CSV／試算表
+
+1. 上傳 `.csv`，或從 Excel／Google 試算表複製後貼上
+2. 按「轉成歌單」
+3. 下載 Elitesand 歌單
+
+表頭建議：
+
+| 標題 | 歌手 | 屬性 | 上次播放 | 播放次數 |
+| --- | --- | --- | --- | --- |
+
+也接受 `歌名`／`title`、`藝術家`／`artist` 等常見別名。沒有表頭時，預設第一欄歌名、第二欄歌手。
 
 ## 匯入 Elitesand Pro
 
@@ -43,8 +61,8 @@ C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports
 
 ## 注意
 
-- 只讀 `streamersonglist.com` 的公開歌單
-- 抓到的資料不會留在這個網頁伺服器；按下載後才存到你的電腦
+- 網址來源只讀 `streamersonglist.com` 的公開歌單
+- 表格來源不把檔案內容送到伺服器
 - CSV 用 UTF-8（含 BOM），Excel 可直接開
 
 ## 倉庫
