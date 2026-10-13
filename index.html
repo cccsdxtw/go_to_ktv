@@ -26,13 +26,6 @@
   }
   header, main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; }
   header { padding: 28px 0 0; }
-  .header-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
   h1 { font-size: 28px; margin: 0 0 8px; }
   .lead { margin: 0; color: var(--muted); line-height: 1.6; }
   .sources {
@@ -84,7 +77,7 @@
     line-height: 1.45;
   }
   button, input, textarea { font: inherit; }
-  button.primary, button.ghost, label.file-btn {
+  button.primary, button.ghost, button.stop, label.file-btn {
     border-radius: 10px;
     padding: 10px 14px;
     cursor: pointer;
@@ -117,13 +110,63 @@
     transform: translateY(1px) scale(0.97);
     background: #323848;
   }
+  button.stop {
+    background: #ff4d3a;
+    color: #fff8f6;
+    border: 0;
+    font-weight: 750;
+    font-size: 15px;
+    padding: 12px 18px;
+    box-shadow: 0 0 0 3px rgba(255, 77, 58, 0.35);
+  }
+  button.stop:hover:not(:disabled) {
+    background: #ff6b5c;
+    box-shadow: 0 0 0 4px rgba(255, 77, 58, 0.45);
+  }
+  button.stop:active:not(:disabled) {
+    transform: translateY(1px) scale(0.97);
+    background: #e03a2a;
+    box-shadow: none;
+  }
   button.primary:focus-visible,
   button.ghost:focus-visible,
+  button.stop:focus-visible,
   label.file-btn:focus-visible,
   button.chip:focus-visible,
   button.fail-retry:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+  .shutdown-bar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: #3a1612;
+    border-bottom: 1px solid #ff6b5c;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  .shutdown-bar[hidden] { display: none !important; }
+  .shutdown-inner {
+    width: min(1100px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 10px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .shutdown-inner p {
+    margin: 0;
+    color: #ffd7bf;
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.45;
+  }
+  .shutdown-inner code {
+    color: #ffe8d8;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 13px;
   }
   button[hidden], label[hidden] { display: none !important; }
   button:disabled, button.busy {
@@ -321,15 +364,16 @@
 </style>
 </head>
 <body>
-<header>
-  <div class="header-row">
-    <div>
-      <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.6</span></h1>
-      <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗可改歌名／歌手（在原字上改）再重試。</p>
-    </div>
-    <button class="ghost" id="shutdown" type="button">結束程式（讓出 8765）</button>
+<div class="shutdown-bar" id="shutdown-bar">
+  <div class="shutdown-inner">
+    <p>用完請按右邊，讓 <code>http://127.0.0.1:8765</code> 空出來。只關分頁不夠。</p>
+    <button class="stop" id="shutdown" type="button">結束程式（讓出 8765）</button>
   </div>
-  <p class="hint">用完請按「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
+</div>
+<header>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.7</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗可改歌名／歌手（在原字上改）再重試。</p>
+  <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -407,7 +451,7 @@
     <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」（按下去會立刻變成「正在交給 Elitesand」，一首一首會比較久，屬正常）。會下載進媒體庫，並掛上<strong>目前播放清單</strong>（取代「音檔遺失」那一列），不必再一首一首點。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。若一直連不上，先關掉 VPN／虛擬區網（工作列右下角小箭頭裡的圖示 → 中斷連線）。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按「結束程式」讓出 8765。版本 v0.6.6。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v0.6.7。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -1461,8 +1505,9 @@ filterEsFail.addEventListener("click", () => {
 q.addEventListener("input", render);
 
 const shutdownButton = document.getElementById("shutdown");
+const shutdownBar = document.getElementById("shutdown-bar");
 if (location.protocol === "file:") {
-  shutdownButton.hidden = true;
+  shutdownBar.hidden = true;
 } else {
   shutdownButton.addEventListener("click", async () => {
     const ok = window.confirm(
