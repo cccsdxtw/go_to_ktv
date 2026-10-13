@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.6.3"
+APP_VERSION = "0.6.4"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -916,7 +916,7 @@ def elitesand_controller_socket(found, pin=""):
         return client
 
 
-def track_for_playlist(raw, video_id, watch_url):
+def track_for_playlist(raw, video_id, watch_url, title="", artist=""):
     track = dict(raw) if isinstance(raw, dict) else {}
     if not track.get("id"):
         track["id"] = video_id
@@ -924,6 +924,14 @@ def track_for_playlist(raw, video_id, watch_url):
         track["url"] = watch_url
     if not track.get("source"):
         track["source"] = "youtube"
+    preferred_title = str(title or "").strip()
+    preferred_artist = str(artist or "").strip()
+    if preferred_title:
+        track["title"] = preferred_title
+    if preferred_artist:
+        track["artist"] = preferred_artist
+        track["artistConfidence"] = 1
+        track["needsArtistConfirmation"] = False
     return track
 
 
@@ -943,7 +951,7 @@ def elitesand_attach_to_playlist(found, track, pin=""):
     return True
 
 
-def elitesand_import_youtube(raw_url, pin=""):
+def elitesand_import_youtube(raw_url, pin="", title="", artist=""):
     found = find_elitesand()
     if not found:
         raise SongListError("找不到 Elitesand Pro。請先打開它；本工具會認它的健康檢查與 /api/obs-launcher。若 3000 被佔，它會在 3001–3010。")
@@ -993,7 +1001,7 @@ def elitesand_import_youtube(raw_url, pin=""):
         track = payload.get("track") or {}
         if is_stub_elitesand_track(track):
             raise SongListError("連到的不是 Elitesand Pro（假服務／測試回應）。請關掉佔用 3000 的舊程式，只留 Elitesand 視窗再開一次。")
-    track = track_for_playlist(track, _video_id, watch_url)
+    track = track_for_playlist(track, _video_id, watch_url, title, artist)
     elitesand_attach_to_playlist(found, track, pin)
     return {
         "skipped": skipped,
@@ -1109,7 +1117,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/elitesand-import":
             try:
                 incoming = read_json_body(self, 12000, "請提供 YouTube 網址。")
-                result = elitesand_import_youtube(incoming.get("url"), incoming.get("pin"))
+                result = elitesand_import_youtube(
+                    incoming.get("url"),
+                    incoming.get("pin"),
+                    incoming.get("title"),
+                    incoming.get("artist"),
+                )
             except SongListError as error:
                 self.respond_json(400, {"error": str(error)})
                 return
@@ -1206,8 +1219,8 @@ def ask_close_old(pids, port):
     names = "、".join(str(pid) for pid in pids)
     message = (
         f"埠 {port} 還被舊程式佔用（PID {names}）。\n\n"
-        "這通常是之前的「哈娜比77 歌單」還在背景跑。\n\n"
-        "要關掉舊程式，改開新版「歌單轉入」嗎？"
+        "這通常是上一份「歌單轉入」還在背景跑。\n\n"
+        "要關掉舊程式，改開這一份嗎？"
     )
     print(message.replace("\n\n", "\n"), flush=True)
     if os.name == "nt":
@@ -1278,7 +1291,6 @@ def main():
     print(f"歌單轉入 v{APP_VERSION}", flush=True)
     print(f"監聽 {HOST}:{port}", flush=True)
     print(f"請打開 http://127.0.0.1:{port}", flush=True)
-    print("正確畫面標題是「歌單轉入」，不是「哈娜比77 歌單」。", flush=True)
     if HOST in {"0.0.0.0", "::"}:
         for ip in local_ips():
             if ip != "127.0.0.1":
