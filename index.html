@@ -217,7 +217,7 @@
     <p class="import-note">先按「搜尋 YouTube」幫目前畫面上的歌找<strong>伴奏</strong>網址（搜尋會帶「伴奏」），再下載 Elitesand 歌單。Elitesand Pro 匯入不會開檔案視窗，只列出 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾沒有就先建，放進 json 後在程式裡匯入。搜尋需要本機已安裝 <code>yt-dlp</code>（<code>pip install yt-dlp</code>）。結果仍可能對到錯版本，匯入前請看一下。</p>
   </section>
 </main>
-<footer>網址來源只讀 streamersonglist.com 公開歌單。表格來源在瀏覽器解析。YouTube 搜尋走本機 yt-dlp，並加上「伴奏」。版本 v0.3.1。</footer>
+<footer>網址來源只讀 streamersonglist.com 公開歌單。表格來源在瀏覽器解析。YouTube 搜尋走本機 yt-dlp，並加上「伴奏」。遠端請用 http://伺服器IP:8765 打開。版本 v0.3.2。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -250,6 +250,14 @@ function setStatus(message, isError) {
   statusEl.classList.toggle("error", Boolean(isError));
 }
 
+function networkErrorMessage(error, action) {
+  const message = String(error && error.message || "");
+  if (message === "Failed to fetch" || error instanceof TypeError) {
+    return `${action}連不上伺服器。請確認遠端有跑 python server.py，並用 http://伺服器IP:8765 打開這個頁面（不要用檔案直接開）。若在別台連，防火牆也要放行 8765。`;
+  }
+  return message || `${action}失敗。`;
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const url = urlInput.value.trim();
@@ -261,7 +269,7 @@ form.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url })
     });
-    const payload = await response.json();
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "抓取失敗。");
     showList({
       ...payload,
@@ -270,7 +278,7 @@ form.addEventListener("submit", async (event) => {
     });
     setStatus(`已抓到 ${payload.songs.length} 首。`, false);
   } catch (error) {
-    setStatus(error.message || "抓取失敗。", true);
+    setStatus(networkErrorMessage(error, "抓取歌單"), true);
   } finally {
     fetchButton.disabled = false;
   }
@@ -615,12 +623,17 @@ function elitesandDocument(list) {
 }
 
 async function searchOneYoutube(song) {
-  const response = await fetch("/api/youtube-search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: song.title, artist: song.artist || "" })
-  });
-  const payload = await response.json();
+  let response;
+  try {
+    response = await fetch("/api/youtube-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: song.title, artist: song.artist || "" })
+    });
+  } catch (error) {
+    throw new Error(networkErrorMessage(error, "YouTube 搜尋"));
+  }
+  const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || "搜尋失敗。");
   song.youtubeUrl = payload.url;
   song.videoId = payload.videoId;
