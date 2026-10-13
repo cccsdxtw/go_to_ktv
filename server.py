@@ -7,9 +7,11 @@ import re
 import shutil
 import socket
 import subprocess
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,7 +21,7 @@ HOST = os.environ.get("GO_TO_KTV_HOST", "0.0.0.0").strip() or "0.0.0.0"
 PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
-APP_VERSION = "0.3.2"
+APP_VERSION = "0.4.0"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{2,40}$")
 PAGE_PATH_RE = re.compile(r"^/t/([A-Za-z0-9_]{2,40})(?:/songs)?/?$")
@@ -477,12 +479,21 @@ def local_ips():
     return sorted(names)
 
 
+def open_browser():
+    url = f"http://127.0.0.1:{PORT}"
+    try:
+        webbrowser.open(url)
+    except Exception as error:
+        print(f"無法自動打開瀏覽器：{error}", flush=True)
+        print(f"請手動打開 {url}", flush=True)
+
+
 def main():
     ytdlp = find_ytdlp()
     if ytdlp:
         print(f"yt-dlp: {ytdlp}", flush=True)
     else:
-        print("提醒：尚未找到 yt-dlp，YouTube 搜尋會失敗。請執行 pip install yt-dlp", flush=True)
+        print("提醒：尚未找到 yt-dlp，YouTube 搜尋會失敗。啟動器會試著自動安裝。", flush=True)
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"監聽 {HOST}:{PORT}（v{APP_VERSION}）", flush=True)
     print(f"本機打開 http://127.0.0.1:{PORT}", flush=True)
@@ -490,6 +501,8 @@ def main():
         for ip in local_ips():
             if ip != "127.0.0.1":
                 print(f"遠端／區網可試 http://{ip}:{PORT}", flush=True)
+    if os.environ.get("GO_TO_KTV_NO_BROWSER", "").strip() not in {"1", "true", "yes"}:
+        threading.Timer(0.6, open_browser).start()
     server.serve_forever()
 
 
