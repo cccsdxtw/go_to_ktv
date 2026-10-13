@@ -67,9 +67,11 @@ class YtdlpAuthTests(unittest.TestCase):
     def test_bot_message(self):
         text = "ERROR: [youtube] xx: Sign in to confirm you’re not a bot. Use --cookies-from-browser"
         self.assertTrue(server.is_bot_block(text))
-        message = server.friendly_download_error(text, True)
-        self.assertIn("關掉 Chrome", message)
-        self.assertNotIn("cookies-from-browser", message)
+        anonymous = server.friendly_download_error(text, False)
+        self.assertIn("不讀你的帳號", anonymous)
+        with_cookies = server.friendly_download_error(text, True)
+        self.assertIn("專用帳號", with_cookies)
+        self.assertNotIn("cookies-from-browser", with_cookies)
 
     def test_cookie_specs_include_profile(self):
         specs = server.cookie_specs("chrome")
@@ -111,11 +113,41 @@ class YtdlpAuthTests(unittest.TestCase):
                     "打上花火",
                     "DAOKO",
                     "chrome",
+                    True,
                 )
             self.assertFalse(result["skipped"])
             self.assertTrue(str(result["cookieBrowser"]).startswith("chrome"))
             self.assertTrue(any("--cookies-from-browser" in call for call in calls))
-            self.assertTrue(any("web,mweb" in " ".join(call) or "--cookies-from-browser" in call for call in calls))
+            self.assertTrue(any("--cookies-from-browser" in call for call in calls))
+
+    def test_anonymous_never_reads_cookies(self):
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            calls = []
+
+            def fake_run(command, **_kwargs):
+                calls.append(list(command))
+                return mock.Mock(
+                    returncode=1,
+                    stdout="",
+                    stderr="ERROR: Sign in to confirm you're not a bot.",
+                )
+
+            with mock.patch.object(server, "AUDIO_DIR", folder), \
+                 mock.patch.object(server, "find_ytdlp", return_value="/usr/bin/yt-dlp"), \
+                 mock.patch.object(server, "find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
+                 mock.patch.object(server.subprocess, "run", side_effect=fake_run):
+                with self.assertRaises(server.SongListError) as ctx:
+                    server.download_youtube_audio(
+                        "https://youtu.be/lOL3CEton6E",
+                        "打上花火",
+                        "DAOKO",
+                        "chrome",
+                        False,
+                    )
+            self.assertTrue(calls)
+            self.assertTrue(all("--cookies-from-browser" not in call for call in calls))
+            self.assertIn("不讀你的帳號", str(ctx.exception))
 
 
 class DownloadPipelineTests(unittest.TestCase):
@@ -157,7 +189,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.5.2")
+        self.assertEqual(server.APP_VERSION, "0.5.3")
 
 
 if __name__ == "__main__":

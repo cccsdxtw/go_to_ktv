@@ -122,6 +122,16 @@
   }
   .chip[aria-pressed="true"] { background: var(--chip-on); border-color: var(--accent); color: #ffd7bf; }
   .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .cookie-opt {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    max-width: 420px;
+    line-height: 1.4;
+  }
+  .cookie-opt input { margin-top: 3px; }
   .browser-pick {
     display: inline-flex;
     align-items: center;
@@ -129,6 +139,7 @@
     color: var(--muted);
     font-size: 13px;
   }
+  .browser-pick[hidden] { display: none !important; }
   .browser-pick select {
     background: #151821;
     color: var(--text);
@@ -192,8 +203,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.2</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，再「下載全部音檔」一次抓好。若出現機器人擋下載：請<strong>完全關掉 Chrome</strong> 再按下載（光開著 youtube.com 還不夠，開著時 Cookie 常被鎖住）。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.3</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。預設<strong>不讀你的 YouTube 帳號</strong>、也不上傳登入。批量下載若被擋，可另開「下載專用」帳號再勾選；不要用日常主帳號。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -233,8 +244,12 @@
         <button class="ghost" id="youtube-search" type="button">搜尋 YouTube</button>
         <button class="ghost" id="youtube-stop" type="button" hidden>停止搜尋</button>
         <button class="ghost" id="copy-youtube" type="button">複製全部 YouTube 網址</button>
-        <label class="browser-pick">下載用瀏覽器
-          <select id="cookie-browser" aria-label="下載用瀏覽器">
+        <label class="cookie-opt">
+          <input id="use-cookies" type="checkbox">
+          使用下載專用帳號（讀本機 Cookie，不上傳；不要用主帳號）
+        </label>
+        <label class="browser-pick" id="browser-pick-wrap" hidden>專用帳號的瀏覽器
+          <select id="cookie-browser" aria-label="專用帳號的瀏覽器">
             <option value="chrome">Chrome</option>
             <option value="edge">Edge</option>
             <option value="firefox">Firefox</option>
@@ -268,10 +283,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>不用一首一首另存，但音檔會存在這台電腦。</strong>Elitesand 要能唱，本來就要本機有檔。若下載一直顯示機器人：先在 Chrome 登入 YouTube，然後<strong>把 Chrome 全部關掉</strong>（工作列也不要留著），再回到這個頁面按「下載全部音檔」。開著 Chrome 時程式常常拿不到登入狀態。抓好後按「開啟音檔資料夾」，把 mp3／m4a <strong>一次拖進</strong> Elitesand 右邊本機檔案。</p>
+    <p class="import-note"><strong>預設不碰你的 YouTube 帳號。</strong>需要登入是 YouTube 在擋機器人，不是這個工具要你的密碼；Cookie 只留在這台電腦，不會上傳。不想用主帳號：另申請一個下載專用 Google 帳號，勾選後再下載。抓好的 mp3 按「開啟音檔資料夾」，一次拖進 Elitesand 右邊本機檔案。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.2。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.3。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -286,6 +301,8 @@ const downloadAudioButton = document.getElementById("download-audio");
 const audioStopButton = document.getElementById("audio-stop");
 const openAudioFolderButton = document.getElementById("open-audio-folder");
 const cookieBrowserSelect = document.getElementById("cookie-browser");
+const useCookiesInput = document.getElementById("use-cookies");
+const browserPickWrap = document.getElementById("browser-pick-wrap");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const q = document.getElementById("q");
@@ -809,6 +826,15 @@ try {
 cookieBrowserSelect.addEventListener("change", () => {
   try { localStorage.setItem(BROWSER_KEY, cookieBrowserSelect.value); } catch (_) { /* ignore */ }
 });
+useCookiesInput.addEventListener("change", () => {
+  if (useCookiesInput.checked) {
+    const ok = window.confirm(
+      "會在這台電腦讀取瀏覽器登入 Cookie，不會傳到網路上。\n請用「下載專用」Google 帳號，不要用日常主帳號。\n確定要開啟？"
+    );
+    if (!ok) useCookiesInput.checked = false;
+  }
+  browserPickWrap.hidden = !useCookiesInput.checked;
+});
 
 async function downloadOneAudio(song) {
   let response;
@@ -820,7 +846,8 @@ async function downloadOneAudio(song) {
         url: song.youtubeUrl,
         title: song.title,
         artist: song.artist || "",
-        browser: cookieBrowserSelect.value
+        browser: useCookiesInput.checked ? cookieBrowserSelect.value : "",
+        useCookies: useCookiesInput.checked
       })
     });
   } catch (error) {
@@ -871,7 +898,7 @@ downloadAudioButton.addEventListener("click", async () => {
     if (audioStopRequested) {
       setStatus(`已停止下載。${done}。音檔在 elitesand-audio 資料夾，可一次拖進 Elitesand。`, failed > 0);
     } else if (failed && ok + skipped === 0) {
-      setStatus(`音檔下載失敗。${done}。請完全關掉 Chrome 後再按一次「下載全部音檔」（開著 youtube.com 會鎖住 Cookie）。`, true);
+      setStatus(`音檔下載失敗。${done}。預設不讀你的帳號。若仍要下載，請用下載專用 Google 帳號勾選後再試，不要用日常主帳號。`, true);
     } else {
       setStatus(`音檔下載完成。${done}。按「開啟音檔資料夾」，把檔案一次拖進 Elitesand 右邊本機檔案。`, failed > 0);
     }
