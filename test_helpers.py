@@ -68,7 +68,7 @@ class YtdlpAuthTests(unittest.TestCase):
         text = "ERROR: [youtube] xx: Sign in to confirm you’re not a bot. Use --cookies-from-browser"
         self.assertTrue(server.is_bot_block(text))
         anonymous = server.friendly_download_error(text, False)
-        self.assertIn("不讀你的帳號", anonymous)
+        self.assertIn("不是用你的帳號", anonymous)
         with_cookies = server.friendly_download_error(text, True)
         self.assertIn("專用帳號", with_cookies)
         self.assertNotIn("cookies-from-browser", with_cookies)
@@ -120,6 +120,11 @@ class YtdlpAuthTests(unittest.TestCase):
             self.assertTrue(any("--cookies-from-browser" in call for call in calls))
             self.assertTrue(any("--cookies-from-browser" in call for call in calls))
 
+    def test_impersonate_without_account(self):
+        with mock.patch.object(server, "curl_cffi_available", return_value=True):
+            self.assertEqual(server.impersonate_client(None), "chrome")
+            self.assertIsNone(server.impersonate_client("chrome"))
+
     def test_anonymous_never_reads_cookies(self):
         with tempfile.TemporaryDirectory() as raw:
             folder = Path(raw)
@@ -147,7 +152,7 @@ class YtdlpAuthTests(unittest.TestCase):
                     )
             self.assertTrue(calls)
             self.assertTrue(all("--cookies-from-browser" not in call for call in calls))
-            self.assertIn("不讀你的帳號", str(ctx.exception))
+            self.assertIn("不是用你的帳號", str(ctx.exception))
 
 
 class DownloadPipelineTests(unittest.TestCase):
@@ -189,7 +194,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.5.3")
+        self.assertEqual(server.APP_VERSION, "0.5.4")
 
 
 if __name__ == "__main__":

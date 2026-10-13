@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.5.3"
+APP_VERSION = "0.5.4"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -345,9 +345,10 @@ def friendly_download_error(text, tried_cookies=False):
     locked = bool(COOKIE_LOCK_RE.search(text or ""))
     if not tried_cookies and (is_bot_block(text) or locked):
         return (
-            "YouTube 現在常把匿名下載當成機器人。"
-            "本工具預設不讀你的帳號、也不上傳任何登入。"
-            "若仍要批量下載：請另開一個「下載專用」Google 帳號，勾選使用專用帳號後再試；不要用日常主帳號。"
+            "YouTube 把自動化下載擋住了。"
+            "那些免登入網站也不是用你的帳號，是網站伺服器假裝成瀏覽器去抓。"
+            "這個工具已改成本機模擬 Chrome，預設仍不讀你的 Google 帳號。"
+            "若還是失敗，多半是這台電腦的網路被 YouTube 標成機器人。"
         )
     if is_bot_block(text) or tried_cookies or locked:
         return (
@@ -428,21 +429,52 @@ def cookie_specs(preferred=""):
     return unique[:6]
 
 
+def curl_cffi_available():
+    try:
+        import curl_cffi  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def impersonate_client(cookie_browser=None):
+    # 跟免登入網站同一招：模擬真實瀏覽器的 TLS，不讀你的 Google 帳號。
+    if cookie_browser or not curl_cffi_available():
+        return None
+    if os.name == "nt":
+        return "chrome"
+    return "chrome"
+
+
 def run_ytdlp(command, timeout, cookie_browser=None, extractor=None):
     cmd = list(command)
     if "--remote-components" not in cmd:
         cmd.extend(["--remote-components", "ejs:github"])
+    impersonate = impersonate_client(cookie_browser)
+    if impersonate:
+        cmd.extend(["--impersonate", impersonate])
     if extractor:
         cmd.extend(["--extractor-args", extractor])
     if cookie_browser:
         cmd.extend(["--cookies-from-browser", cookie_browser])
-    return subprocess.run(
+    completed = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=timeout,
         check=False,
     )
+    text = ytdlp_output_text(completed)
+    if impersonate and completed.returncode != 0 and "Impersonate target" in text:
+        cmd = [part for part in cmd if part not in {"--impersonate", impersonate}]
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    return completed
 
 
 def download_attempts(preferred_browser="", use_cookies=False):
