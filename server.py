@@ -280,8 +280,48 @@ def build_search_query(title, artist):
     artist = re.sub(r"\s+", " ", str(artist or "")).strip()
     if not title:
         raise SongListError("缺少歌名，無法搜尋。")
-    query = f"{title} {artist}".strip() if artist else title
-    return query[:180]
+    # 歌回／KTV 用途優先找伴奏，避免搜到原唱有人聲的版本。
+    parts = [title]
+    if artist:
+        parts.append(artist)
+    parts.append("伴奏")
+    return " ".join(parts)[:180]
+
+
+INSTRUMENTAL_HINTS = (
+    "伴奏",
+    "カラオケ",
+    "karaoke",
+    "instrumental",
+    "off vocal",
+    "offvocal",
+    "tv size instrumental",
+    "マイナスワン",
+)
+
+
+def instrumental_score(item):
+    title = str(item.get("title") or "").lower()
+    score = 0
+    for hint in INSTRUMENTAL_HINTS:
+        if hint.lower() in title:
+            score += 10
+    # 明顯有人聲／翻唱的往後排
+    for bad in ("cover", "歌ってみた", "covered by", "full vocal", "原曲"):
+        if bad in title:
+            score -= 3
+    return score
+
+
+def pick_youtube_entry(entries):
+    candidates = [item for item in entries if isinstance(item, dict) and item.get("id")]
+    if not candidates:
+        return None
+    ranked = sorted(
+        enumerate(candidates),
+        key=lambda pair: (-instrumental_score(pair[1]), pair[0]),
+    )
+    return ranked[0][1]
 
 
 def search_youtube(title, artist):
@@ -291,7 +331,7 @@ def search_youtube(title, artist):
     query = build_search_query(title, artist)
     command = [
         ytdlp,
-        f"ytsearch1:{query}",
+        f"ytsearch5:{query}",
         "--flat-playlist",
         "--dump-single-json",
         "--no-warnings",
@@ -319,12 +359,12 @@ def search_youtube(title, artist):
     except json.JSONDecodeError as error:
         raise SongListError("YouTube 搜尋結果無法讀取。") from error
     entries = payload.get("entries") if isinstance(payload, dict) else None
-    if isinstance(entries, list) and entries:
-        item = entries[0]
+    if isinstance(entries, list):
+        item = pick_youtube_entry(entries)
     elif isinstance(payload, dict) and payload.get("id"):
         item = payload
     else:
-        raise SongListError("找不到這首歌的 YouTube 結果。")
+        item = None
     if not isinstance(item, dict) or not item.get("id"):
         raise SongListError("找不到這首歌的 YouTube 結果。")
     video_id = str(item["id"])
@@ -373,7 +413,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "ytdlp": bool(ytdlp),
                     "ytdlpPath": ytdlp,
-                    "version": "0.3.0",
+                    "version": "0.3.1",
                 },
             )
             return

@@ -153,7 +153,7 @@
 <body>
 <header>
   <h1>歌單轉入</h1>
-  <p class="lead">可以從 StreamerSonglist 網址抓歌，也可以帶 CSV／試算表進來；再搜 YouTube 網址，轉成 Elitesand Pro 能抓音訊的歌單。</p>
+  <p class="lead">可以從 StreamerSonglist 網址抓歌，也可以帶 CSV／試算表進來；再搜 YouTube 伴奏網址，轉成 Elitesand Pro 能抓音訊的歌單。</p>
 </header>
 <main>
   <div class="sources">
@@ -214,10 +214,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note">先按「搜尋 YouTube」幫目前畫面上的歌找網址，再下載 Elitesand 歌單。Elitesand Pro 匯入不會開檔案視窗，只列出 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾沒有就先建，放進 json 後在程式裡匯入。搜尋需要本機已安裝 <code>yt-dlp</code>（<code>pip install yt-dlp</code>）。結果可能對到翻唱或錯版本，匯入前請看一下。</p>
+    <p class="import-note">先按「搜尋 YouTube」幫目前畫面上的歌找<strong>伴奏</strong>網址（搜尋會帶「伴奏」），再下載 Elitesand 歌單。Elitesand Pro 匯入不會開檔案視窗，只列出 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾沒有就先建，放進 json 後在程式裡匯入。搜尋需要本機已安裝 <code>yt-dlp</code>（<code>pip install yt-dlp</code>）。結果仍可能對到錯版本，匯入前請看一下。</p>
   </section>
 </main>
-<footer>網址來源只讀 streamersonglist.com 公開歌單。表格來源在瀏覽器解析。YouTube 搜尋走本機 yt-dlp。版本 v0.3.0。</footer>
+<footer>網址來源只讀 streamersonglist.com 公開歌單。表格來源在瀏覽器解析。YouTube 搜尋走本機 yt-dlp，並加上「伴奏」。版本 v0.3.1。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
