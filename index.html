@@ -170,8 +170,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.4.3</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可從網址抓歌、貼 CSV／試算表，再搜 YouTube 伴奏轉成 Elitesand 歌單。若還看到「哈娜比77 歌單」，那是舊程式佔著 8765，請關掉舊分頁、看新開的網址。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.4.4</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可從網址抓歌、貼 CSV／試算表，再搜 YouTube 伴奏轉成 Elitesand 歌單。若 8765 被舊程式佔用，會跳出視窗問你要不要關掉。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -236,7 +236,7 @@
     <p class="import-note">先按「搜尋 YouTube」幫目前畫面上的歌找<strong>伴奏</strong>網址（搜尋會帶「伴奏」），再下載 Elitesand 歌單。Elitesand Pro 匯入不會開檔案視窗，只列出 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾沒有就先建，放進 json 後在程式裡匯入。搜尋需要本機已安裝 <code>yt-dlp</code>（<code>pip install yt-dlp</code>）。結果仍可能對到錯版本，匯入前請看一下。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋走本機 yt-dlp 並加「伴奏」。版本 v0.4.3。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋走本機 yt-dlp 並加「伴奏」。版本 v0.4.4。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
