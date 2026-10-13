@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>歌單轉成試算表</title>
+<title>歌單轉入</title>
 <style>
   :root {
     color-scheme: dark;
@@ -28,30 +28,70 @@
   header { padding: 28px 0 0; }
   h1 { font-size: 28px; margin: 0 0 8px; }
   .lead { margin: 0; color: var(--muted); line-height: 1.6; }
-  form {
+  .sources {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+    margin: 18px 0 8px;
+  }
+  .source-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+  }
+  .source-card h2 {
+    margin: 0 0 6px;
+    font-size: 16px;
+  }
+  .source-card p {
+    margin: 0 0 12px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  form, .sheet-actions {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    margin: 18px 0 8px;
   }
-  label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  input[type="url"] {
-    flex: 1 1 280px;
-    background: var(--panel);
+  label.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  input[type="url"], textarea, input[type="search"] {
+    width: 100%;
+    background: #151821;
     color: var(--text);
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 12px;
+    font: inherit;
   }
-  button, input { font: inherit; }
-  button.primary, button.ghost {
+  textarea {
+    min-height: 110px;
+    resize: vertical;
+    line-height: 1.45;
+  }
+  button, input, textarea { font: inherit; }
+  button.primary, button.ghost, label.file-btn {
     border-radius: 10px;
     padding: 10px 14px;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
   }
   button.primary { background: var(--accent); color: #1a1008; border: 0; font-weight: 650; }
-  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button.ghost, label.file-btn {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+  }
   button:disabled { opacity: 0.55; cursor: wait; }
+  input[type="file"] { display: none; }
   .status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
   .status.error { color: var(--danger); }
   .result { display: none; }
@@ -64,19 +104,12 @@
     flex-wrap: wrap;
     margin: 18px 0 8px;
   }
-  h2 { margin: 0 0 4px; font-size: 20px; }
+  .result-head h2 { margin: 0 0 4px; font-size: 20px; }
   .meta { margin: 0; color: var(--muted); font-size: 14px; }
   .meta a { color: #8eb6ff; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
-  input[type="search"] {
-    flex: 1 1 220px;
-    background: var(--panel);
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 10px 12px;
-  }
+  input[type="search"] { flex: 1 1 220px; width: auto; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip {
     background: var(--chip);
@@ -119,16 +152,34 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉成試算表</h1>
-  <p class="lead">貼上 StreamerSonglist 的歌單網址。可以下載 CSV，或下載 Elitesand Pro 能直接匯入的歌單。</p>
-  <form id="fetch-form">
-    <label for="url">歌單網址</label>
-    <input id="url" type="url" name="url" required placeholder="https://streamersonglist.com/t/名稱/songs" autocomplete="off">
-    <button class="primary" id="fetch" type="submit">抓取歌單</button>
-  </form>
-  <p class="status" id="status" role="status"></p>
+  <h1>歌單轉入</h1>
+  <p class="lead">可以從 StreamerSonglist 網址抓歌，也可以帶 CSV／試算表進來，再轉成 Elitesand Pro 要的歌單。</p>
 </header>
 <main>
+  <div class="sources">
+    <section class="source-card">
+      <h2>從網址抓歌</h2>
+      <p>貼上公開歌單網址，例如 https://streamersonglist.com/t/名稱/songs</p>
+      <form id="fetch-form">
+        <label class="sr-only" for="url">歌單網址</label>
+        <input id="url" type="url" name="url" required placeholder="https://streamersonglist.com/t/名稱/songs" autocomplete="off">
+        <button class="primary" id="fetch" type="submit">抓取歌單</button>
+      </form>
+    </section>
+    <section class="source-card">
+      <h2>從 CSV／試算表轉入</h2>
+      <p>上傳 CSV，或從 Excel／Google 試算表複製後貼上。需要有歌名欄；歌手欄建議也有。</p>
+      <label class="sr-only" for="sheet-text">試算表內容</label>
+      <textarea id="sheet-text" placeholder="標題&#9;歌手&#10;打上花火&#9;DAOKO × 米津玄師"></textarea>
+      <div class="sheet-actions" style="margin-top:10px">
+        <label class="file-btn" for="sheet-file">選擇 CSV 檔</label>
+        <input id="sheet-file" type="file" accept=".csv,text/csv,text/plain">
+        <button class="primary" id="sheet-parse" type="button">轉成歌單</button>
+      </div>
+    </section>
+  </div>
+  <p class="status" id="status" role="status"></p>
+
   <section class="result" id="result">
     <div class="result-head">
       <div>
@@ -163,17 +214,26 @@
     <p class="import-note">Elitesand Pro 的匯入不會開檔案視窗，只列出這個資料夾裡的 json。請把下載的檔案放到 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾還沒有就先建一個。放進去之後，在程式裡按匯入，選這份歌單。清單帶的是歌名和歌手；要播出來，還得在 Elitesand 裡加上 YouTube 連結或本機音檔。</p>
   </section>
 </main>
-<footer>只讀取 streamersonglist.com 的公開歌單。檔案不會留在這個網頁裡，按下載之後會存到你的電腦。版本 v0.1.0。</footer>
+<footer>網址來源只讀 streamersonglist.com 公開歌單。表格來源在你自己的瀏覽器解析，不會上傳檔案內容。版本 v0.2.0。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
 const fetchButton = document.getElementById("fetch");
+const sheetText = document.getElementById("sheet-text");
+const sheetFile = document.getElementById("sheet-file");
+const sheetParse = document.getElementById("sheet-parse");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const q = document.getElementById("q");
 const chipsEl = document.getElementById("chips");
 const rowsEl = document.getElementById("rows");
 const shownEl = document.getElementById("shown");
+
+const TITLE_ALIASES = new Set(["標題", "歌名", "歌曲", "曲名", "title", "song", "song title", "name", "曲目"]);
+const ARTIST_ALIASES = new Set(["歌手", "藝術家", "演唱", "演唱者", "artist", "singer", "performer"]);
+const ATTR_ALIASES = new Set(["屬性", "標籤", "語言", "tags", "tag", "attributes", "attribute", "language"]);
+const LAST_ALIASES = new Set(["上次播放", "最後播放", "lastplayed", "last played", "last play"]);
+const TIMES_ALIASES = new Set(["播放次數", "次數", "timesplayed", "times played", "plays", "play count"]);
 
 let current = null;
 const selected = new Set();
@@ -196,8 +256,12 @@ form.addEventListener("submit", async (event) => {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "抓取失敗。");
-    showList(payload);
-    setStatus("", false);
+    showList({
+      ...payload,
+      sourceKind: "streamersonglist",
+      exportBase: payload.username || "songs"
+    });
+    setStatus(`已抓到 ${payload.songs.length} 首。`, false);
   } catch (error) {
     setStatus(error.message || "抓取失敗。", true);
   } finally {
@@ -205,15 +269,164 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+sheetFile.addEventListener("change", async () => {
+  const file = sheetFile.files && sheetFile.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    sheetText.value = text;
+    applySheetText(text, file.name.replace(/\.[^.]+$/, "") || "csv-import");
+  } catch (error) {
+    setStatus(error.message || "讀檔失敗。", true);
+  } finally {
+    sheetFile.value = "";
+  }
+});
+
+sheetParse.addEventListener("click", () => {
+  try {
+    applySheetText(sheetText.value, "sheet-import");
+  } catch (error) {
+    setStatus(error.message || "解析失敗。", true);
+  }
+});
+
+function applySheetText(raw, baseName) {
+  const songs = songsFromSheet(raw);
+  showList({
+    username: baseName,
+    displayName: baseName,
+    total: songs.length,
+    songs,
+    sourceUrl: "",
+    sourceKind: "sheet",
+    exportBase: baseName
+  });
+  setStatus(`已從表格讀入 ${songs.length} 首。`, false);
+}
+
+function songsFromSheet(raw) {
+  const text = String(raw || "").replace(/^\uFEFF/, "").trim();
+  if (!text) throw new Error("請先貼上表格內容，或選擇 CSV 檔。");
+  const rows = parseDelimited(text);
+  if (!rows.length) throw new Error("表格是空的。");
+
+  let start = 0;
+  let map = { title: 0, artist: 1, attributes: -1, lastPlayed: -1, timesPlayed: -1 };
+  const headerMap = detectHeaderMap(rows[0]);
+  if (headerMap) {
+    map = headerMap;
+    start = 1;
+  }
+
+  const songs = [];
+  for (let i = start; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || !row.length || row.every((cell) => !String(cell || "").trim())) continue;
+    const title = String(row[map.title] || "").trim();
+    if (!title) continue;
+    const artist = map.artist >= 0 ? String(row[map.artist] || "").trim() : "";
+    const attrRaw = map.attributes >= 0 ? String(row[map.attributes] || "").trim() : "";
+    const attributes = attrRaw
+      ? attrRaw.split(/[、,，;/|]+/).map((part) => part.trim()).filter(Boolean)
+      : [];
+    const lastPlayed = map.lastPlayed >= 0 ? String(row[map.lastPlayed] || "").trim() : "";
+    const timesRaw = map.timesPlayed >= 0 ? String(row[map.timesPlayed] || "").trim() : "";
+    const timesPlayed = Number.parseInt(timesRaw, 10);
+    songs.push({
+      id: `sheet-${songs.length + 1}`,
+      title,
+      artist,
+      attributes,
+      lastPlayed,
+      timesPlayed: Number.isFinite(timesPlayed) ? timesPlayed : 0
+    });
+  }
+  if (!songs.length) throw new Error("找不到歌名欄。請確認第一欄是歌名，或表頭寫「標題／歌名／title」。");
+  return songs;
+}
+
+function detectHeaderMap(row) {
+  const normalized = row.map((cell) => String(cell || "").trim().toLowerCase());
+  const find = (aliases) => normalized.findIndex((cell) => aliases.has(cell));
+  const title = find(TITLE_ALIASES);
+  if (title < 0) return null;
+  return {
+    title,
+    artist: find(ARTIST_ALIASES),
+    attributes: find(ATTR_ALIASES),
+    lastPlayed: find(LAST_ALIASES),
+    timesPlayed: find(TIMES_ALIASES)
+  };
+}
+
+function parseDelimited(text) {
+  const delimiter = detectDelimiter(text);
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === delimiter) {
+      row.push(field);
+      field = "";
+      continue;
+    }
+    if (ch === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+      continue;
+    }
+    if (ch === "\r") continue;
+    field += ch;
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function detectDelimiter(text) {
+  const sample = text.split(/\r?\n/).slice(0, 5).join("\n");
+  const tabs = (sample.match(/\t/g) || []).length;
+  const commas = (sample.match(/,/g) || []).length;
+  return tabs > commas ? "\t" : ",";
+}
+
 function showList(payload) {
   current = payload;
   selected.clear();
   q.value = "";
   document.getElementById("list-title").textContent = `${payload.displayName} 的歌單`;
-  document.getElementById("list-meta").innerHTML = `共 ${payload.songs.length} 首 · 來源 <a href="${payload.sourceUrl}" target="_blank" rel="noreferrer">StreamerSonglist</a>`;
+  if (payload.sourceKind === "streamersonglist" && payload.sourceUrl) {
+    document.getElementById("list-meta").innerHTML = `共 ${payload.songs.length} 首 · 來源 <a href="${payload.sourceUrl}" target="_blank" rel="noreferrer">StreamerSonglist</a>`;
+  } else {
+    document.getElementById("list-meta").textContent = `共 ${payload.songs.length} 首 · 來源 CSV／試算表`;
+  }
   const names = [];
   for (const song of payload.songs) {
-    for (const name of song.attributes) {
+    for (const name of song.attributes || []) {
       if (!names.includes(name)) names.push(name);
     }
   }
@@ -241,7 +454,7 @@ function visibleSongs() {
   return current.songs.filter((song) => {
     if (query && !`${song.title} ${song.artist}`.toLowerCase().includes(query)) return false;
     for (const tag of selected) {
-      if (!song.attributes.includes(tag)) return false;
+      if (!(song.attributes || []).includes(tag)) return false;
     }
     return true;
   });
@@ -259,10 +472,10 @@ function render() {
     const tr = document.createElement("tr");
     tr.append(
       cell(song.title),
-      cell(song.artist),
-      tags(song.attributes),
+      cell(song.artist || ""),
+      tags(song.attributes || []),
       cell(song.lastPlayed || "尚未播放"),
-      cell(String(song.timesPlayed), true)
+      cell(String(song.timesPlayed || 0), true)
     );
     return tr;
   }));
@@ -300,9 +513,9 @@ function toCsv(list) {
   const lines = [header, ...list.map((song) => [
     song.title,
     song.artist,
-    song.attributes.join("、"),
-    song.lastPlayed,
-    song.timesPlayed
+    (song.attributes || []).join("、"),
+    song.lastPlayed || "",
+    song.timesPlayed || 0
   ])];
   return lines.map((line) => line.map(csvEscape).join(",")).join("\r\n");
 }
@@ -312,9 +525,9 @@ function toTsv(list) {
   const lines = [header, ...list.map((song) => [
     song.title,
     song.artist,
-    song.attributes.join("、"),
-    song.lastPlayed,
-    String(song.timesPlayed)
+    (song.attributes || []).join("、"),
+    song.lastPlayed || "",
+    String(song.timesPlayed || 0)
   ])];
   return lines.map((line) => line.join("\t")).join("\n");
 }
@@ -330,41 +543,45 @@ function downloadText(filename, text, type) {
 }
 
 function elitesandFilename() {
-  const raw = String(current.displayName || current.username || "playlist")
+  const raw = String(current.displayName || current.exportBase || current.username || "playlist")
     .replace(/[\\/:*?"<>|]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 60);
-  return `${raw || current.username}.json`;
+  return `${raw || "playlist"}.json`;
 }
 
 function elitesandDocument(list) {
+  const source = current.sourceKind === "sheet" ? "spreadsheet" : "streamersonglist";
+  const prefix = current.sourceKind === "sheet" ? "sheet" : "ssl";
   return {
     version: "5.0",
     timestamp: Date.now(),
     currentTrackIndex: -1,
     playlist: list.map((song, index) => ({
-      id: song.id ? `ssl-${song.id}` : `ssl-${index + 1}`,
+      id: song.id ? String(song.id).startsWith("ssl-") || String(song.id).startsWith("sheet-")
+        ? String(song.id)
+        : `${prefix}-${song.id}` : `${prefix}-${index + 1}`,
       title: song.title,
       artist: song.artist || "",
       artistConfidence: song.artist ? 1 : 0,
       needsArtistConfirmation: !song.artist,
-      source: "streamersonglist"
+      source
     }))
   };
 }
 
 document.getElementById("download").addEventListener("click", () => {
   if (!current) return;
-  downloadText(`${current.username}-songs.csv`, `\uFEFF${toCsv(visibleSongs())}`, "text/csv;charset=utf-8");
+  const base = current.exportBase || current.username || "songs";
+  downloadText(`${base}-songs.csv`, `\uFEFF${toCsv(visibleSongs())}`, "text/csv;charset=utf-8");
 });
 
 document.getElementById("download-elitesand").addEventListener("click", () => {
   if (!current) return;
-  const list = visibleSongs();
   downloadText(
     elitesandFilename(),
-    JSON.stringify(elitesandDocument(list), null, 2),
+    JSON.stringify(elitesandDocument(visibleSongs()), null, 2),
     "application/json;charset=utf-8"
   );
 });
