@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.6.2"
+APP_VERSION = "0.6.3"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -866,6 +866,83 @@ def is_stub_elitesand_track(track):
     return filename == "mock.mp3" or title == "mock track"
 
 
+_elitesand_sio = None
+_elitesand_sio_base = ""
+_elitesand_sio_lock = threading.Lock()
+
+
+def elitesand_socket_disconnect():
+    global _elitesand_sio, _elitesand_sio_base
+    client = _elitesand_sio
+    _elitesand_sio = None
+    _elitesand_sio_base = ""
+    if client is None:
+        return
+    try:
+        client.disconnect()
+    except Exception:
+        pass
+
+
+def elitesand_controller_socket(found, pin=""):
+    """以本機 controller 連 Elitesand 的 socket.io，才能改目前播放清單。"""
+    global _elitesand_sio, _elitesand_sio_base
+    try:
+        import socketio
+    except ImportError as error:
+        raise SongListError("缺少 python-socketio。請再雙擊一次「開始」讓它自動安裝套件。") from error
+    base = found["base"]
+    pin = str(pin or "").strip()
+    with _elitesand_sio_lock:
+        if _elitesand_sio is not None and _elitesand_sio_base == base and getattr(_elitesand_sio, "connected", False):
+            return _elitesand_sio
+        elitesand_socket_disconnect()
+        client = socketio.Client(reconnection=False, logger=False, engineio_logger=False)
+        auth = {"clientType": "controller"}
+        if pin:
+            auth["pin"] = pin
+        try:
+            client.connect(
+                base,
+                auth=auth,
+                transports=["websocket", "polling"],
+                wait_timeout=8,
+                socketio_path="socket.io",
+            )
+        except Exception as error:
+            raise SongListError("連不上 Elitesand 播放清單通道。請確認 Elitesand 視窗還開著。") from error
+        _elitesand_sio = client
+        _elitesand_sio_base = base
+        return client
+
+
+def track_for_playlist(raw, video_id, watch_url):
+    track = dict(raw) if isinstance(raw, dict) else {}
+    if not track.get("id"):
+        track["id"] = video_id
+    if not track.get("url"):
+        track["url"] = watch_url
+    if not track.get("source"):
+        track["source"] = "youtube"
+    return track
+
+
+def elitesand_attach_to_playlist(found, track, pin=""):
+    """媒體庫下載後，把這首掛上目前播放清單（取代同 id 的音檔遺失列）。"""
+    if not isinstance(track, dict) or not track.get("id"):
+        raise SongListError("Elitesand 回傳的歌曲不完整，無法加入播放清單。")
+    client = elitesand_controller_socket(found, pin)
+    try:
+        client.emit("playlist:remove", track.get("id"))
+        result = client.call("playlist:add", [track], timeout=12)
+    except Exception as error:
+        elitesand_socket_disconnect()
+        raise SongListError(f"音檔已進媒體庫，但沒掛上播放清單：{error}") from error
+    if isinstance(result, dict) and result.get("ok") is False:
+        raise SongListError(str(result.get("error") or "無法加入 Elitesand 播放清單。"))
+    return True
+
+
 def elitesand_import_youtube(raw_url, pin=""):
     found = find_elitesand()
     if not found:
@@ -905,21 +982,22 @@ def elitesand_import_youtube(raw_url, pin=""):
         raise SongListError("Elitesand 回傳無法讀取。")
     if status == 401 or payload.get("code") == "PIN_REQUIRED":
         raise SongListError("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。")
+    skipped = False
+    track = {}
     if payload.get("code") == "DUPLICATE_SONG":
-        existing = payload.get("existing") or {}
-        return {
-            "skipped": True,
-            "title": existing.get("title") or "",
-            "filename": existing.get("filename") or "",
-            "elitesand": found["base"],
-        }
-    if status >= 400 or not payload.get("success"):
+        skipped = True
+        track = payload.get("existing") or {}
+    elif status >= 400 or not payload.get("success"):
         raise SongListError(str(payload.get("error") or "Elitesand 下載失敗。")[:240])
-    track = payload.get("track") or {}
-    if is_stub_elitesand_track(track):
-        raise SongListError("連到的不是 Elitesand Pro（假服務／測試回應）。請關掉佔用 3000 的舊程式，只留 Elitesand 視窗再開一次。")
+    else:
+        track = payload.get("track") or {}
+        if is_stub_elitesand_track(track):
+            raise SongListError("連到的不是 Elitesand Pro（假服務／測試回應）。請關掉佔用 3000 的舊程式，只留 Elitesand 視窗再開一次。")
+    track = track_for_playlist(track, _video_id, watch_url)
+    elitesand_attach_to_playlist(found, track, pin)
     return {
-        "skipped": False,
+        "skipped": skipped,
+        "playlistOk": True,
         "title": track.get("title") or "",
         "filename": track.get("filename") or "",
         "id": track.get("id") or "",
