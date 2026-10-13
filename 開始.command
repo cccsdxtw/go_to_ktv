@@ -2,7 +2,7 @@
 cd "$(dirname "$0")" || exit 1
 
 echo
-echo "歌單轉入 v0.6.6 啟動中..."
+echo "歌單轉入 v0.6.7 啟動中..."
 echo "這個視窗請留著，用完再關。"
 echo "用完請按網頁「結束程式（讓出 8765）」，或關掉這個視窗。"
 echo "只關瀏覽器分頁的話，http://127.0.0.1:8765 還會被佔著。"
@@ -35,9 +35,13 @@ echo "用完請按網頁「結束程式」，或關掉這個視窗，8765 才會
 echo
 python3 server.py
 CODE=$?
-if [ "$CODE" -ne 0 ]; then
+if [ "$CODE" -eq 0 ]; then
   echo
-  echo "程式異常結束，代碼 ${CODE}。"
+  echo "已結束，8765 已讓出，視窗即將關閉。"
+  osascript -e 'tell application "Terminal" to close front window' >/dev/null 2>&1 || true
+  exit 0
 fi
+echo
+echo "程式異常結束，代碼 ${CODE}。"
 echo
 read -r -p "按 Enter 關閉…"
