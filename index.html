@@ -149,6 +149,22 @@
   th { position: sticky; top: 0; background: #222633; font-weight: 600; font-size: 13px; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tbody tr:hover { background: #232836; }
+  input.cell-edit {
+    width: 100%;
+    min-width: 6em;
+    background: transparent;
+    color: inherit;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 4px 6px;
+    font: inherit;
+  }
+  input.cell-edit:hover,
+  input.cell-edit:focus {
+    border-color: var(--line);
+    background: #151821;
+    outline: none;
+  }
   tr.fail-row td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
   tr.flash { background: #3a2424; }
   .fail-panel {
@@ -243,8 +259,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.1</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗的歌會列在表格上方，點歌名就能跳到那一列。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.2</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗可改歌名／歌手（在原字上改）再重試。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -318,10 +334,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」。失敗的歌會出現在表格上方清單，點一下可跳到該列。Elitesand 有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」。失敗的歌可直接改表格裡的歌名／歌手（原字留下，只改錯的），Enter 會用新字重搜那一首；或改完後按失敗清單的「重試這 N 首」。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.1。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.2。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -733,7 +749,7 @@ function renderFailPanel() {
   const boxes = [];
   if (yt.length) {
     boxes.push(failBox(
-      `YouTube 搜尋失敗 ${yt.length} 首（點歌名跳到該列）`,
+      `YouTube 搜尋失敗 ${yt.length} 首（先改歌名／歌手再重試）`,
       yt,
       `重試這 ${yt.length} 首`,
       () => searchYoutubeTargets(ytFailedSongs())
@@ -817,8 +833,8 @@ function render() {
     if (isYtFail(song) || isSendFail(song)) tr.classList.add("fail-row");
     if (index === highlightIndex) tr.classList.add("flash");
     tr.append(
-      cell(song.title),
-      cell(song.artist || ""),
+      editableCell(song, "title"),
+      editableCell(song, "artist"),
       tags(song.attributes || []),
       youtubeCell(song),
       audioCell(song),
@@ -833,6 +849,53 @@ function cell(text, numeric) {
   const td = document.createElement("td");
   if (numeric) td.className = "num";
   td.textContent = text;
+  return td;
+}
+
+function commitSongField(song, field, raw) {
+  const next = String(raw ?? "").replace(/\s+/g, " ").trim();
+  const prev = String(song[field] || "");
+  if (field === "title" && !next) return false;
+  if (next === prev) return false;
+  song[field] = next;
+  song.youtubeUrl = "";
+  song.videoId = "";
+  song.youtubeTitle = "";
+  song.youtubeUploader = "";
+  song.youtubeError = "";
+  song.elitesandOk = false;
+  song.elitesandFile = "";
+  song.elitesandSkipped = false;
+  song.audioError = "";
+  song.audioFile = "";
+  song.audioSkipped = false;
+  return true;
+}
+
+function editableCell(song, field) {
+  const td = document.createElement("td");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "cell-edit";
+  input.value = song[field] || "";
+  input.setAttribute("aria-label", field === "title" ? "歌名" : "歌手");
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitSongField(song, field, input.value);
+    input.value = song[field] || "";
+    input.blur();
+    if (!song.youtubeUrl) searchYoutubeTargets([song]);
+    else render();
+  });
+  input.addEventListener("change", () => {
+    const changed = commitSongField(song, field, input.value);
+    input.value = song[field] || "";
+    if (changed && document.activeElement !== input) render();
+  });
+  td.appendChild(input);
   return td;
 }
 

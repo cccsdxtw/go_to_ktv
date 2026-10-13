@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.6.1"
+APP_VERSION = "0.6.2"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
