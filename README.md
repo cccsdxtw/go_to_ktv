@@ -1,6 +1,7 @@
 # go_to_ktv
 
 把歌單轉成 Elitesand Pro 可唱的歌：**用 Elitesand 自己的 YouTube 下載**。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube **伴奏**。版本 **v0.6.7**。
+目前對應版本 Elitesand v1.1.0
 
 ## 怎麼用（建議）
 
