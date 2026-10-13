@@ -122,6 +122,27 @@
   }
   .chip[aria-pressed="true"] { background: var(--chip-on); border-color: var(--accent); color: #ffd7bf; }
   .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .browser-pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .browser-pick select {
+    background: #151821;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font: inherit;
+  }
+  td.err {
+    max-width: 280px;
+    color: var(--danger);
+    font-size: 12px;
+    line-height: 1.4;
+  }
   .table-wrap {
     background: var(--panel);
     border: 1px solid var(--line);
@@ -171,8 +192,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.0</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，再「下載全部音檔」一次抓好，把整個資料夾拖進 Elitesand。歌單 json 只帶歌名／網址，Elitesand 匯入本身不會下載。若 8765 被舊程式佔用，會跳出視窗問你要不要關掉。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.1</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，再「下載全部音檔」一次抓好。音檔本來就會存在這台電腦（Elitesand 也是這樣唱），但不用你一首一首另存。YouTube 若擋機器人，請在 Chrome／Edge 登入後再下載。若 8765 被舊程式佔用，會跳出視窗問你要不要關掉。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -212,6 +233,14 @@
         <button class="ghost" id="youtube-search" type="button">搜尋 YouTube</button>
         <button class="ghost" id="youtube-stop" type="button" hidden>停止搜尋</button>
         <button class="ghost" id="copy-youtube" type="button">複製全部 YouTube 網址</button>
+        <label class="browser-pick">下載用瀏覽器
+          <select id="cookie-browser" aria-label="下載用瀏覽器">
+            <option value="chrome">Chrome</option>
+            <option value="edge">Edge</option>
+            <option value="firefox">Firefox</option>
+            <option value="brave">Brave</option>
+          </select>
+        </label>
         <button class="primary" id="download-audio" type="button">下載全部音檔</button>
         <button class="ghost" id="audio-stop" type="button" hidden>停止下載</button>
         <button class="ghost" id="open-audio-folder" type="button">開啟音檔資料夾</button>
@@ -239,10 +268,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>不用一首一首點。</strong>Elitesand 的「匯入歌單」只會帶入歌名與 YouTube 網址，不會幫你下載音檔，所以才會顯示音檔遺失。正確流程：① 搜尋 YouTube ② 按「下載全部音檔」（本機一次排程抓好）③ 按「開啟音檔資料夾」，把裡面的 mp3／m4a <strong>一次拖進</strong> Elitesand 右邊「本機檔案」區塊。json 歌單仍可當備份；左邊工作區會顯示已抓好的檔名。搜尋與下載都需要 <code>yt-dlp</code>；轉成 mp3 需要本機有 ffmpeg。</p>
+    <p class="import-note"><strong>不用一首一首另存，但音檔會存在這台電腦。</strong>Elitesand 要能唱，本來就要本機有檔（它自己從 YouTube 抓也是存硬碟）。這裡按一次「下載全部音檔」會整批抓好。若出現 Sign in / not a bot，是 YouTube 擋機器人：先在 Chrome 或 Edge 登入 youtube.com，選對瀏覽器再下載。正確流程：① 搜尋 YouTube ② 選瀏覽器 ③ 下載全部音檔 ④ 開啟資料夾，把 mp3／m4a <strong>一次拖進</strong> Elitesand 右邊本機檔案。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.0。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.1。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -256,6 +285,7 @@ const copyYoutubeButton = document.getElementById("copy-youtube");
 const downloadAudioButton = document.getElementById("download-audio");
 const audioStopButton = document.getElementById("audio-stop");
 const openAudioFolderButton = document.getElementById("open-audio-folder");
+const cookieBrowserSelect = document.getElementById("cookie-browser");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const q = document.getElementById("q");
@@ -531,8 +561,9 @@ function audioCell(song) {
     return td;
   }
   if (song.audioError) {
+    td.className = "err";
     td.textContent = song.audioError;
-    td.style.color = "var(--danger)";
+    td.title = song.audioError;
     return td;
   }
   td.textContent = song.youtubeUrl ? "尚未下載" : "—";
@@ -768,6 +799,17 @@ copyYoutubeButton.addEventListener("click", async () => {
   setStatus(`已複製 ${urls.length} 條 YouTube 網址。Elitesand 右邊貼單支網址仍是一首一首；要一次下載請改用「下載全部音檔」。`, false);
 });
 
+const BROWSER_KEY = "go_to_ktv_browser";
+try {
+  const saved = localStorage.getItem(BROWSER_KEY);
+  if (saved && cookieBrowserSelect.querySelector(`option[value="${saved}"]`)) {
+    cookieBrowserSelect.value = saved;
+  }
+} catch (_) { /* ignore */ }
+cookieBrowserSelect.addEventListener("change", () => {
+  try { localStorage.setItem(BROWSER_KEY, cookieBrowserSelect.value); } catch (_) { /* ignore */ }
+});
+
 async function downloadOneAudio(song) {
   let response;
   try {
@@ -777,7 +819,8 @@ async function downloadOneAudio(song) {
       body: JSON.stringify({
         url: song.youtubeUrl,
         title: song.title,
-        artist: song.artist || ""
+        artist: song.artist || "",
+        browser: cookieBrowserSelect.value
       })
     });
   } catch (error) {
@@ -827,8 +870,10 @@ downloadAudioButton.addEventListener("click", async () => {
     const done = `成功 ${ok}，略過已存在 ${skipped}，失敗 ${failed}`;
     if (audioStopRequested) {
       setStatus(`已停止下載。${done}。音檔在 elitesand-audio 資料夾，可一次拖進 Elitesand。`, failed > 0);
+    } else if (failed && ok + skipped === 0) {
+      setStatus(`音檔下載失敗。${done}。YouTube 擋住機器人時，請用已登入的 Chrome／Edge 再試一次；音檔仍會一次存到這台電腦，不用一首一首另存。`, true);
     } else {
-      setStatus(`音檔下載完成。${done}。按「開啟音檔資料夾」，把檔案一次拖進 Elitesand 右邊本機檔案。`, failed > 0 && ok + skipped === 0);
+      setStatus(`音檔下載完成。${done}。按「開啟音檔資料夾」，把檔案一次拖進 Elitesand 右邊本機檔案。`, failed > 0);
     }
   } finally {
     audioDownloading = false;

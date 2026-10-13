@@ -60,7 +60,62 @@ class DownloadSkipTests(unittest.TestCase):
             self.assertEqual(found, audio)
 
 
+class YtdlpAuthTests(unittest.TestCase):
+    def setUp(self):
+        server.reset_ytdlp_auth()
+
+    def test_bot_message(self):
+        text = "ERROR: [youtube] xx: Sign in to confirm you’re not a bot. Use --cookies-from-browser"
+        self.assertTrue(server.is_bot_block(text))
+        message = server.friendly_download_error(text, True)
+        self.assertIn("機器人", message)
+        self.assertNotIn("cookies-from-browser", message)
+
+    def test_normalize_browser(self):
+        self.assertEqual(server.normalize_browser("Chrome"), "chrome")
+        self.assertEqual(server.normalize_browser("msedge"), "edge")
+        self.assertEqual(server.normalize_browser("hack;rm"), "")
+
+    def test_retries_with_chrome_cookies(self):
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            calls = []
+
+            def fake_run(command, **_kwargs):
+                calls.append(list(command))
+                if "--cookies-from-browser" not in command:
+                    return mock.Mock(
+                        returncode=1,
+                        stdout="",
+                        stderr="ERROR: Sign in to confirm you're not a bot. Use --cookies-from-browser",
+                    )
+                video_id = None
+                for part in command:
+                    if str(part).endswith(".%(ext)s"):
+                        video_id = Path(part).name.split(".", 1)[0]
+                (folder / f"{video_id}.mp3").write_bytes(b"audio" * 500)
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            with mock.patch.object(server, "AUDIO_DIR", folder), \
+                 mock.patch.object(server, "find_ytdlp", return_value="/usr/bin/yt-dlp"), \
+                 mock.patch.object(server, "find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
+                 mock.patch.object(server.subprocess, "run", side_effect=fake_run):
+                result = server.download_youtube_audio(
+                    "https://youtu.be/lOL3CEton6E",
+                    "打上花火",
+                    "DAOKO",
+                    "chrome",
+                )
+            self.assertFalse(result["skipped"])
+            self.assertEqual(result["cookieBrowser"], "chrome")
+            self.assertTrue(any("--cookies-from-browser" in call and "chrome" in call for call in calls))
+            self.assertGreaterEqual(len(calls), 2)
+
+
 class DownloadPipelineTests(unittest.TestCase):
+    def setUp(self):
+        server.reset_ytdlp_auth()
+
     def test_download_renames_and_skips(self):
         with tempfile.TemporaryDirectory() as raw:
             folder = Path(raw)
@@ -96,7 +151,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.5.0")
+        self.assertEqual(server.APP_VERSION, "0.5.1")
 
 
 if __name__ == "__main__":
