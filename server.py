@@ -25,7 +25,10 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.6.5"
+APP_VERSION = "0.6.6"
+_httpd = None
+_bound_port = PORT
+_released = False
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -1141,6 +1144,16 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.respond_json(200, {"ok": True, "folder": folder})
             return
+        if path == "/api/shutdown":
+            length = int(self.headers.get("Content-Length") or "0")
+            if length > 0:
+                self.rfile.read(min(length, 8000))
+            self.respond_json(
+                200,
+                {"ok": True, "released": f"http://127.0.0.1:{_bound_port}"},
+            )
+            schedule_shutdown()
+            return
         self.send_error(404)
 
     def respond_json(self, status, payload):
@@ -1218,9 +1231,9 @@ def pids_listening(port):
 def ask_close_old(pids, port):
     names = "、".join(str(pid) for pid in pids)
     message = (
-        f"埠 {port} 還被舊程式佔用（PID {names}）。\n\n"
-        "這通常是上一份「歌單轉入」還在背景跑。\n\n"
-        "要關掉舊程式，改開這一份嗎？"
+        f"http://127.0.0.1:{port} 還被上一份「歌單轉入」佔著（PID {names}）。\n\n"
+        "用完應按網頁上的「結束程式」，或關掉那個黑色視窗，這個位置才會讓出來。\n\n"
+        "現在要結束舊的、讓這一份接手嗎？（下次請先結束，就不必再頂）"
     )
     print(message.replace("\n\n", "\n"), flush=True)
     if os.name == "nt":
@@ -1251,6 +1264,36 @@ def stop_pids(pids):
             print(f"無法結束 PID {pid}：{error}", flush=True)
 
 
+class AppServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def schedule_shutdown():
+    def _stop():
+        time.sleep(0.2)
+        stop_http()
+
+    threading.Thread(target=_stop, daemon=True).start()
+
+
+def stop_http():
+    global _released
+    httpd = _httpd
+    if httpd is None or _released:
+        return
+    _released = True
+    print(f"已結束，http://127.0.0.1:{_bound_port} 已讓出。", flush=True)
+    try:
+        httpd.shutdown()
+    except Exception:
+        pass
+    try:
+        httpd.server_close()
+    except OSError:
+        pass
+
+
 def bind_server(host, start_port, tries=20):
     occupants = pids_listening(start_port)
     if occupants:
@@ -1258,11 +1301,11 @@ def bind_server(host, start_port, tries=20):
             stop_pids(occupants)
             time.sleep(0.8)
         else:
-            print("已略過關閉舊程式，改試其他埠。", flush=True)
+            print("已略過結束舊程式，改試其他埠。下次請先結束上一份，讓 8765 空出來。", flush=True)
     last_error = None
     for port in range(start_port, start_port + tries):
         try:
-            server = ThreadingHTTPServer((host, port), Handler)
+            server = AppServer((host, port), Handler)
             if port != start_port:
                 print(f"注意：{start_port} 仍被占用，已改用 {port}。", flush=True)
             return server, port
@@ -1282,22 +1325,31 @@ def open_browser(port):
 
 
 def main():
+    global _httpd, _bound_port
     ytdlp = find_ytdlp()
     if ytdlp:
         print(f"yt-dlp: {ytdlp}", flush=True)
     else:
         print("提醒：尚未找到 yt-dlp，YouTube 搜尋會失敗。啟動器會試著自動安裝。", flush=True)
     server, port = bind_server(HOST, PORT)
+    _httpd = server
+    _bound_port = port
     print(f"歌單轉入 v{APP_VERSION}", flush=True)
     print(f"監聽 {HOST}:{port}", flush=True)
     print(f"請打開 http://127.0.0.1:{port}", flush=True)
+    print("用完請按網頁「結束程式」，或關掉這個視窗，8765 才會讓出來。只關瀏覽器分頁是不夠的。", flush=True)
     if HOST in {"0.0.0.0", "::"}:
         for ip in local_ips():
             if ip != "127.0.0.1":
                 print(f"遠端／區網可試 http://{ip}:{port}", flush=True)
     if os.environ.get("GO_TO_KTV_NO_BROWSER", "").strip() not in {"1", "true", "yes"}:
         threading.Timer(0.6, lambda: open_browser(port)).start()
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_http()
 
 
 if __name__ == "__main__":

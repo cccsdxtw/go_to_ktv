@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.6.5")
+        self.assertEqual(server.APP_VERSION, "0.6.6")
 
 
 class FakeResponse:
@@ -441,6 +441,31 @@ class PlaylistAttachTests(unittest.TestCase):
         self.assertEqual(calls[1][0], "call")
         self.assertEqual(calls[1][1], "playlist:add")
         self.assertEqual(calls[1][2][0]["filename"], "a.mp3")
+
+
+class ShutdownTests(unittest.TestCase):
+    def test_stop_http_closes_socket(self):
+        class Dummy:
+            def __init__(self):
+                self.calls = []
+
+            def shutdown(self):
+                self.calls.append("shutdown")
+
+            def server_close(self):
+                self.calls.append("close")
+
+        dummy = Dummy()
+        server._httpd = dummy
+        server._bound_port = 8765
+        server._released = False
+        server.stop_http()
+        self.assertEqual(dummy.calls, ["shutdown", "close"])
+        self.assertTrue(server._released)
+        server.stop_http()
+        self.assertEqual(dummy.calls, ["shutdown", "close"])
+        server._httpd = None
+        server._released = False
 
 
 if __name__ == "__main__":
