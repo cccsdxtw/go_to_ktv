@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>歌單轉成試算表</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #12141a;
+    --panel: #1b1e27;
+    --line: #2c3140;
+    --text: #f3f4f8;
+    --muted: #9aa3b5;
+    --accent: #ff8a3d;
+    --chip: #262b38;
+    --chip-on: #3a2a1e;
+    --danger: #ffb4b4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header, main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; }
+  header { padding: 28px 0 0; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  .lead { margin: 0; color: var(--muted); line-height: 1.6; }
+  form {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 18px 0 8px;
+  }
+  label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  input[type="url"] {
+    flex: 1 1 280px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+  }
+  button, input { font: inherit; }
+  button.primary, button.ghost {
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #1a1008; border: 0; font-weight: 650; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: 0.55; cursor: wait; }
+  .status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
+  .status.error { color: var(--danger); }
+  .result { display: none; }
+  .result.show { display: block; }
+  .result-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin: 18px 0 8px;
+  }
+  h2 { margin: 0 0 4px; font-size: 20px; }
+  .meta { margin: 0; color: var(--muted); font-size: 14px; }
+  .meta a { color: #8eb6ff; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+  input[type="search"] {
+    flex: 1 1 220px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    background: var(--chip);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 12px;
+    cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--chip-on); border-color: var(--accent); color: #ffd7bf; }
+  .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .table-wrap {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: auto;
+    max-height: calc(100vh - 280px);
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 720px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { position: sticky; top: 0; background: #222633; font-weight: 600; font-size: 13px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr:hover { background: #232836; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #2a3142; color: #d7deee; }
+  .empty { padding: 28px 14px; color: var(--muted); }
+  .import-note {
+    margin: 14px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .import-note code {
+    color: #d7deee;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+  footer { width: min(1100px, calc(100% - 32px)); margin: 16px auto 28px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>歌單轉成試算表</h1>
+  <p class="lead">貼上 StreamerSonglist 的歌單網址。可以下載 CSV，或下載 Elitesand Pro 能直接匯入的歌單。</p>
+  <form id="fetch-form">
+    <label for="url">歌單網址</label>
+    <input id="url" type="url" name="url" required placeholder="https://streamersonglist.com/t/名稱/songs" autocomplete="off">
+    <button class="primary" id="fetch" type="submit">抓取歌單</button>
+  </form>
+  <p class="status" id="status" role="status"></p>
+</header>
+<main>
+  <section class="result" id="result">
+    <div class="result-head">
+      <div>
+        <h2 id="list-title"></h2>
+        <p class="meta" id="list-meta"></p>
+      </div>
+      <div class="actions">
+        <button class="ghost" id="copy" type="button">複製到試算表</button>
+        <button class="ghost" id="download" type="button">下載 CSV</button>
+        <button class="primary" id="download-elitesand" type="button">下載 Elitesand 歌單</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="搜尋歌名或歌手" aria-label="搜尋歌名或歌手">
+      <div class="chips" id="chips"></div>
+      <div class="count" id="shown"></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>標題</th>
+            <th>歌手</th>
+            <th>屬性</th>
+            <th>上次播放</th>
+            <th class="num">播放次數</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="import-note">Elitesand Pro 的匯入不會開檔案視窗，只列出這個資料夾裡的 json。請把下載的檔案放到 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾還沒有就先建一個。放進去之後，在程式裡按匯入，選這份歌單。清單帶的是歌名和歌手；要播出來，還得在 Elitesand 裡加上 YouTube 連結或本機音檔。</p>
+  </section>
+</main>
+<footer>只讀取 streamersonglist.com 的公開歌單。檔案不會留在這個網頁裡，按下載之後會存到你的電腦。版本 v0.1.0。</footer>
+<script>
+const form = document.getElementById("fetch-form");
+const urlInput = document.getElementById("url");
+const fetchButton = document.getElementById("fetch");
+const statusEl = document.getElementById("status");
+const resultEl = document.getElementById("result");
+const q = document.getElementById("q");
+const chipsEl = document.getElementById("chips");
+const rowsEl = document.getElementById("rows");
+const shownEl = document.getElementById("shown");
+
+let current = null;
+const selected = new Set();
+
+function setStatus(message, isError) {
+  statusEl.textContent = message;
+  statusEl.classList.toggle("error", Boolean(isError));
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const url = urlInput.value.trim();
+  fetchButton.disabled = true;
+  setStatus("正在抓取歌單…", false);
+  try {
+    const response = await fetch("/api/songs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "抓取失敗。");
+    showList(payload);
+    setStatus("", false);
+  } catch (error) {
+    setStatus(error.message || "抓取失敗。", true);
+  } finally {
+    fetchButton.disabled = false;
+  }
+});
+
+function showList(payload) {
+  current = payload;
+  selected.clear();
+  q.value = "";
+  document.getElementById("list-title").textContent = `${payload.displayName} 的歌單`;
+  document.getElementById("list-meta").innerHTML = `共 ${payload.songs.length} 首 · 來源 <a href="${payload.sourceUrl}" target="_blank" rel="noreferrer">StreamerSonglist</a>`;
+  const names = [];
+  for (const song of payload.songs) {
+    for (const name of song.attributes) {
+      if (!names.includes(name)) names.push(name);
+    }
+  }
+  chipsEl.replaceChildren(...names.map((name) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.textContent = name;
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => {
+      if (selected.has(name)) selected.delete(name);
+      else selected.add(name);
+      button.setAttribute("aria-pressed", selected.has(name) ? "true" : "false");
+      render();
+    });
+    return button;
+  }));
+  resultEl.classList.add("show");
+  render();
+}
+
+function visibleSongs() {
+  if (!current) return [];
+  const query = q.value.trim().toLowerCase();
+  return current.songs.filter((song) => {
+    if (query && !`${song.title} ${song.artist}`.toLowerCase().includes(query)) return false;
+    for (const tag of selected) {
+      if (!song.attributes.includes(tag)) return false;
+    }
+    return true;
+  });
+}
+
+function render() {
+  const list = visibleSongs();
+  const total = current ? current.songs.length : 0;
+  shownEl.textContent = list.length === total ? `顯示 ${list.length} 首` : `顯示 ${list.length} / ${total} 首`;
+  if (!list.length) {
+    rowsEl.innerHTML = '<tr><td class="empty" colspan="5">沒有符合的歌。</td></tr>';
+    return;
+  }
+  rowsEl.replaceChildren(...list.map((song) => {
+    const tr = document.createElement("tr");
+    tr.append(
+      cell(song.title),
+      cell(song.artist),
+      tags(song.attributes),
+      cell(song.lastPlayed || "尚未播放"),
+      cell(String(song.timesPlayed), true)
+    );
+    return tr;
+  }));
+}
+
+function cell(text, numeric) {
+  const td = document.createElement("td");
+  if (numeric) td.className = "num";
+  td.textContent = text;
+  return td;
+}
+
+function tags(names) {
+  const td = document.createElement("td");
+  const wrap = document.createElement("div");
+  wrap.className = "tags";
+  for (const name of names) {
+    const span = document.createElement("span");
+    span.className = "tag";
+    span.textContent = name;
+    wrap.appendChild(span);
+  }
+  td.appendChild(wrap);
+  return td;
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  if (/[",\n\r]/.test(text)) return `"${text.replaceAll('"', '""')}"`;
+  return text;
+}
+
+function toCsv(list) {
+  const header = ["標題", "歌手", "屬性", "上次播放", "播放次數"];
+  const lines = [header, ...list.map((song) => [
+    song.title,
+    song.artist,
+    song.attributes.join("、"),
+    song.lastPlayed,
+    song.timesPlayed
+  ])];
+  return lines.map((line) => line.map(csvEscape).join(",")).join("\r\n");
+}
+
+function toTsv(list) {
+  const header = ["標題", "歌手", "屬性", "上次播放", "播放次數"];
+  const lines = [header, ...list.map((song) => [
+    song.title,
+    song.artist,
+    song.attributes.join("、"),
+    song.lastPlayed,
+    String(song.timesPlayed)
+  ])];
+  return lines.map((line) => line.join("\t")).join("\n");
+}
+
+function downloadText(filename, text, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function elitesandFilename() {
+  const raw = String(current.displayName || current.username || "playlist")
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+  return `${raw || current.username}.json`;
+}
+
+function elitesandDocument(list) {
+  return {
+    version: "5.0",
+    timestamp: Date.now(),
+    currentTrackIndex: -1,
+    playlist: list.map((song, index) => ({
+      id: song.id ? `ssl-${song.id}` : `ssl-${index + 1}`,
+      title: song.title,
+      artist: song.artist || "",
+      artistConfidence: song.artist ? 1 : 0,
+      needsArtistConfirmation: !song.artist,
+      source: "streamersonglist"
+    }))
+  };
+}
+
+document.getElementById("download").addEventListener("click", () => {
+  if (!current) return;
+  downloadText(`${current.username}-songs.csv`, `\uFEFF${toCsv(visibleSongs())}`, "text/csv;charset=utf-8");
+});
+
+document.getElementById("download-elitesand").addEventListener("click", () => {
+  if (!current) return;
+  const list = visibleSongs();
+  downloadText(
+    elitesandFilename(),
+    JSON.stringify(elitesandDocument(list), null, 2),
+    "application/json;charset=utf-8"
+  );
+});
+
+document.getElementById("copy").addEventListener("click", async () => {
+  if (!current) return;
+  const button = document.getElementById("copy");
+  await navigator.clipboard.writeText(toTsv(visibleSongs()));
+  const previous = button.textContent;
+  button.textContent = "已複製";
+  setTimeout(() => { button.textContent = previous; }, 1200);
+});
+
+q.addEventListener("input", render);
+</script>
+</body>
+</html>
