@@ -1,6 +1,6 @@
 # go_to_ktv
 
-把歌單轉成 Elitesand Pro 可匯入的格式。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube 網址。版本 **v0.3.0**。
+把歌單轉成 Elitesand Pro 可匯入的格式。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube **伴奏**網址。版本 **v0.3.1**。
 
 ## 需求
 
@@ -32,10 +32,11 @@ python server.py
 ### 搜 YouTube 再匯出
 
 1. 歌單出現後，按「搜尋 YouTube」（只處理目前畫面上、還沒有網址的歌）
-2. 表格會顯示找到的影片；不對可以之後再改
-3. 按「下載 Elitesand 歌單」
+2. 搜尋關鍵字會自動加上「伴奏」，比較容易對到可唱版本
+3. 表格會顯示找到的影片；不對可以之後再改
+4. 按「下載 Elitesand 歌單」
 
-有 YouTube 網址的歌會寫進 json 的 `url`，Elitesand 匯入後比較有機會直接抓音訊。搜尋結果可能是翻唱或錯版本，請先看一眼。
+有 YouTube 網址的歌會寫進 json 的 `url`，Elitesand 匯入後比較有機會直接抓音訊。搜尋結果仍可能對錯，請先看一眼。
 
 ## 匯入 Elitesand Pro
 
