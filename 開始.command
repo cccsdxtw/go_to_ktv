@@ -1,6 +1,11 @@
 #!/bin/bash
 cd "$(dirname "$0")" || exit 1
 
+echo
+echo "歌單轉入 v0.4.3 啟動中..."
+echo "這個視窗請留著，用完再關。"
+echo "正確網頁標題是「歌單轉入」，不是「哈娜比77 歌單」。"
+echo
 
 export PATH="$HOME/Library/Python/3.13/bin:$HOME/Library/Python/3.12/bin:$HOME/Library/Python/3.11/bin:$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
