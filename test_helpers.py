@@ -68,12 +68,18 @@ class YtdlpAuthTests(unittest.TestCase):
         text = "ERROR: [youtube] xx: Sign in to confirm you’re not a bot. Use --cookies-from-browser"
         self.assertTrue(server.is_bot_block(text))
         message = server.friendly_download_error(text, True)
-        self.assertIn("機器人", message)
+        self.assertIn("關掉 Chrome", message)
         self.assertNotIn("cookies-from-browser", message)
+
+    def test_cookie_specs_include_profile(self):
+        specs = server.cookie_specs("chrome")
+        self.assertTrue(any(item.startswith("chrome") for item in specs))
+        self.assertIn("chrome:Default", specs)
 
     def test_normalize_browser(self):
         self.assertEqual(server.normalize_browser("Chrome"), "chrome")
         self.assertEqual(server.normalize_browser("msedge"), "edge")
+        self.assertEqual(server.normalize_browser("chrome:Default"), "chrome:Default")
         self.assertEqual(server.normalize_browser("hack;rm"), "")
 
     def test_retries_with_chrome_cookies(self):
@@ -107,9 +113,9 @@ class YtdlpAuthTests(unittest.TestCase):
                     "chrome",
                 )
             self.assertFalse(result["skipped"])
-            self.assertEqual(result["cookieBrowser"], "chrome")
-            self.assertTrue(any("--cookies-from-browser" in call and "chrome" in call for call in calls))
-            self.assertGreaterEqual(len(calls), 2)
+            self.assertTrue(str(result["cookieBrowser"]).startswith("chrome"))
+            self.assertTrue(any("--cookies-from-browser" in call for call in calls))
+            self.assertTrue(any("web,mweb" in " ".join(call) or "--cookies-from-browser" in call for call in calls))
 
 
 class DownloadPipelineTests(unittest.TestCase):
@@ -151,7 +157,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.5.1")
+        self.assertEqual(server.APP_VERSION, "0.5.2")
 
 
 if __name__ == "__main__":

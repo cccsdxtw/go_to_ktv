@@ -192,8 +192,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.1</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，再「下載全部音檔」一次抓好。音檔本來就會存在這台電腦（Elitesand 也是這樣唱），但不用你一首一首另存。YouTube 若擋機器人，請在 Chrome／Edge 登入後再下載。若 8765 被舊程式佔用，會跳出視窗問你要不要關掉。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.2</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，再「下載全部音檔」一次抓好。若出現機器人擋下載：請<strong>完全關掉 Chrome</strong> 再按下載（光開著 youtube.com 還不夠，開著時 Cookie 常被鎖住）。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -268,10 +268,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>不用一首一首另存，但音檔會存在這台電腦。</strong>Elitesand 要能唱，本來就要本機有檔（它自己從 YouTube 抓也是存硬碟）。這裡按一次「下載全部音檔」會整批抓好。若出現 Sign in / not a bot，是 YouTube 擋機器人：先在 Chrome 或 Edge 登入 youtube.com，選對瀏覽器再下載。正確流程：① 搜尋 YouTube ② 選瀏覽器 ③ 下載全部音檔 ④ 開啟資料夾，把 mp3／m4a <strong>一次拖進</strong> Elitesand 右邊本機檔案。</p>
+    <p class="import-note"><strong>不用一首一首另存，但音檔會存在這台電腦。</strong>Elitesand 要能唱，本來就要本機有檔。若下載一直顯示機器人：先在 Chrome 登入 YouTube，然後<strong>把 Chrome 全部關掉</strong>（工作列也不要留著），再回到這個頁面按「下載全部音檔」。開著 Chrome 時程式常常拿不到登入狀態。抓好後按「開啟音檔資料夾」，把 mp3／m4a <strong>一次拖進</strong> Elitesand 右邊本機檔案。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.1。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.2。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -871,7 +871,7 @@ downloadAudioButton.addEventListener("click", async () => {
     if (audioStopRequested) {
       setStatus(`已停止下載。${done}。音檔在 elitesand-audio 資料夾，可一次拖進 Elitesand。`, failed > 0);
     } else if (failed && ok + skipped === 0) {
-      setStatus(`音檔下載失敗。${done}。YouTube 擋住機器人時，請用已登入的 Chrome／Edge 再試一次；音檔仍會一次存到這台電腦，不用一首一首另存。`, true);
+      setStatus(`音檔下載失敗。${done}。請完全關掉 Chrome 後再按一次「下載全部音檔」（開著 youtube.com 會鎖住 Cookie）。`, true);
     } else {
       setStatus(`音檔下載完成。${done}。按「開啟音檔資料夾」，把檔案一次拖進 Elitesand 右邊本機檔案。`, failed > 0);
     }

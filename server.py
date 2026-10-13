@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.5.1"
+APP_VERSION = "0.5.2"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -300,7 +300,7 @@ BOT_ERROR_RE = re.compile(
     re.I,
 )
 COOKIE_LOCK_RE = re.compile(
-    r"could not copy|database is locked|failed to load cookies|unable to find|no such file",
+    r"could not copy|database is locked|failed to load cookies|unable to find|no such file|profile",
     re.I,
 )
 _working_ytdlp = {"browser": None, "extractor": None}
@@ -312,15 +312,25 @@ def reset_ytdlp_auth():
 
 
 def normalize_browser(value):
-    name = str(value or "").strip().lower().replace(" ", "-")
+    raw = str(value or "").strip()
+    if ":" in raw:
+        browser, profile = raw.split(":", 1)
+    else:
+        browser, profile = raw, ""
+    browser = browser.strip().lower().replace(" ", "-")
     aliases = {
         "msedge": "edge",
         "microsoft-edge": "edge",
         "google-chrome": "chrome",
         "googlechrome": "chrome",
     }
-    name = aliases.get(name, name)
-    return name if name in COOKIE_BROWSERS else ""
+    browser = aliases.get(browser, browser)
+    profile = profile.strip()
+    if browser not in COOKIE_BROWSERS:
+        return ""
+    if profile:
+        return f"{browser}:{profile}"
+    return browser
 
 
 def ytdlp_output_text(completed):
@@ -332,35 +342,91 @@ def is_bot_block(text):
 
 
 def friendly_download_error(text, tried_cookies=False):
-    if is_bot_block(text) or tried_cookies:
+    locked = bool(COOKIE_LOCK_RE.search(text or ""))
+    if is_bot_block(text) or tried_cookies or locked:
         return (
-            "YouTube 把下載當成機器人擋住了。"
-            "請先在 Chrome 或 Edge 打開 youtube.com 並登入，上面選好瀏覽器再按一次「下載全部音檔」。"
-            "驗證過後會自動整批存到這台電腦，不用一首一首另存。"
+            "YouTube 仍擋住下載。光開著 youtube.com 還不夠："
+            "請完全關掉 Chrome（工作列圖示也要關乾淨），再用「開始.bat」開本工具，選 Chrome 後按一次「下載全部音檔」。"
+            "或改用已登入 YouTube 的 Edge。Cookie 被鎖住時，開著瀏覽器會抓不到登入狀態。"
         )
     detail = (text or "").strip().splitlines()
     return (detail[-1] if detail else "音檔下載失敗。")[:240]
 
 
-def cookie_attempt_order(preferred=""):
-    ordered = []
-    for name in (
-        preferred,
-        os.environ.get("GO_TO_KTV_BROWSER", ""),
-        _working_ytdlp.get("browser"),
-        "chrome",
-        "edge",
-        "firefox",
-        "brave",
-    ):
-        name = normalize_browser(name)
-        if name and name not in ordered:
-            ordered.append(name)
-    return ordered
+def browser_user_data(browser):
+    browser = normalize_browser(browser).split(":")[0]
+    home = Path.home()
+    local = Path(os.environ.get("LOCALAPPDATA") or (home / "AppData" / "Local"))
+    if os.name == "nt":
+        mapping = {
+            "chrome": local / "Google" / "Chrome" / "User Data",
+            "edge": local / "Microsoft" / "Edge" / "User Data",
+            "brave": local / "BraveSoftware" / "Brave-Browser" / "User Data",
+            "chromium": local / "Chromium" / "User Data",
+        }
+    elif sys.platform == "darwin":
+        mapping = {
+            "chrome": home / "Library" / "Application Support" / "Google" / "Chrome",
+            "edge": home / "Library" / "Application Support" / "Microsoft Edge",
+            "brave": home / "Library" / "Application Support" / "BraveSoftware" / "Brave-Browser",
+            "chromium": home / "Library" / "Application Support" / "Chromium",
+            "firefox": home / "Library" / "Application Support" / "Firefox",
+            "safari": home / "Library" / "Safari",
+        }
+    else:
+        mapping = {
+            "chrome": home / ".config" / "google-chrome",
+            "edge": home / ".config" / "microsoft-edge",
+            "brave": home / ".config" / "BraveSoftware" / "Brave-Browser",
+            "chromium": home / ".config" / "chromium",
+            "firefox": home / ".mozilla" / "firefox",
+        }
+    return mapping.get(browser)
+
+
+def browser_profiles(browser):
+    root = browser_user_data(browser)
+    names = []
+    if root and root.is_dir():
+        for entry in sorted(root.iterdir()):
+            if not entry.is_dir():
+                continue
+            if entry.name in {"Default", "Guest Profile", "System Profile"} or entry.name.startswith("Profile "):
+                if (entry / "Cookies").is_file() or (entry / "Network" / "Cookies").is_file() or (entry / "Preferences").is_file():
+                    names.append(entry.name)
+    if "Default" not in names:
+        names.insert(0, "Default")
+    # Default 先試
+    names.sort(key=lambda item: (0 if item == "Default" else 1, item))
+    return names
+
+
+def cookie_specs(preferred=""):
+    specs = []
+    preferred = normalize_browser(preferred) or normalize_browser(os.environ.get("GO_TO_KTV_BROWSER", "")) or "chrome"
+    base = preferred.split(":")[0]
+    if ":" in preferred:
+        specs.append(preferred)
+    for profile in browser_profiles(base):
+        specs.append(f"{base}:{profile}")
+    specs.append(base)
+    if base != "edge":
+        specs.append("edge")
+        specs.append("edge:Default")
+    unique = []
+    seen = set()
+    for spec in specs:
+        spec = normalize_browser(spec) or spec
+        if spec and spec not in seen:
+            seen.add(spec)
+            unique.append(spec)
+    return unique[:6]
 
 
 def run_ytdlp(command, timeout, cookie_browser=None, extractor=None):
     cmd = list(command)
+    if "--remote-components" not in cmd:
+        cmd.extend(["--remote-components", "ejs:github"])
     if extractor:
         cmd.extend(["--extractor-args", extractor])
     if cookie_browser:
@@ -375,14 +441,18 @@ def run_ytdlp(command, timeout, cookie_browser=None, extractor=None):
 
 
 def download_attempts(preferred_browser=""):
+    # 有登入 Cookie 時要用 web／mweb，android 常還是會被當成機器人。
+    extractors = (
+        "youtube:player_client=web,mweb",
+        "youtube:player_client=tv_embedded,tv",
+    )
     attempts = []
     working = (_working_ytdlp.get("browser"), _working_ytdlp.get("extractor"))
     if working[0] or working[1]:
         attempts.append(working)
-    attempts.append((None, "youtube:player_client=android,ios"))
-    for browser in cookie_attempt_order(preferred_browser):
-        attempts.append((browser, "youtube:player_client=android,ios"))
-        attempts.append((browser, None))
+    for spec in cookie_specs(preferred_browser):
+        for extractor in extractors:
+            attempts.append((spec, extractor))
     unique = []
     seen = set()
     for item in attempts:
@@ -390,7 +460,7 @@ def download_attempts(preferred_browser=""):
             continue
         seen.add(item)
         unique.append(item)
-    return unique
+    return unique[:8]
 
 
 def build_search_query(title, artist):
