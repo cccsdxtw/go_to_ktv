@@ -39,18 +39,22 @@ if errorlevel 1 (
 echo.
 echo 正在啟動伺服器，瀏覽器應會自動打開...
 echo 看到「打開 http://127.0.0.1:8765」就表示成功。
-echo 用完後關閉這個視窗即可。
+echo 用完請按網頁紅色「結束程式」，黑視窗會自己關。
 echo.
 %PY% "%~dp0server.py"
 set "ERR=%ERRORLEVEL%"
-if not "%ERR%"=="0" (
+if "%ERR%"=="0" (
   echo.
-  echo 程式異常結束，代碼 %ERR%。
+  echo 已結束，8765 已讓出，視窗即將關閉。
+  ping -n 2 127.0.0.1 >nul
+  endlocal
+  exit 0
 )
+echo.
+echo 程式異常結束，代碼 %ERR%。
 
 :END
 echo.
-echo 若上面有「已讓出」，8765 已空出來，下次直接再開即可。
 echo 視窗保留中。看完後按任意鍵關閉。
 pause >nul
 endlocal

@@ -1511,7 +1511,7 @@ if (location.protocol === "file:") {
 } else {
   shutdownButton.addEventListener("click", async () => {
     const ok = window.confirm(
-      "結束後 http://127.0.0.1:8765 會讓出來。\n\n下次再雙擊「開始」即可，不必再開一份去頂舊的。"
+      "結束後 http://127.0.0.1:8765 會讓出來，黑色視窗也會一起關掉。\n\n下次再雙擊「開始」即可，不必再開一份去頂舊的。"
     );
     if (!ok) return;
     setButtonBusy(shutdownButton, true, "正在讓出 8765…");
@@ -1521,8 +1521,7 @@ if (location.protocol === "file:") {
     document.body.innerHTML = [
       "<main style=\"max-width:640px;margin:48px auto;padding:0 16px;font-family:inherit\">",
       "<h1>已結束</h1>",
-      "<p>http://127.0.0.1:8765 已讓出。可以關掉這個分頁，下次再雙擊「開始」。</p>",
-      "<p style=\"color:#9aa3b5\">黑色視窗若還開著，看完後關掉即可。</p>",
+      "<p>http://127.0.0.1:8765 已讓出。黑色視窗也會一起關掉。可以關掉這個分頁，下次再雙擊「開始」。</p>",
       "</main>"
     ].join("");
   });

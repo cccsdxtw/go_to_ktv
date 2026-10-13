@@ -35,9 +35,13 @@ echo "用完請按網頁「結束程式」，或關掉這個視窗，8765 才會
 echo
 python3 server.py
 CODE=$?
-if [ "$CODE" -ne 0 ]; then
+if [ "$CODE" -eq 0 ]; then
   echo
-  echo "程式異常結束，代碼 ${CODE}。"
+  echo "已結束，8765 已讓出，視窗即將關閉。"
+  osascript -e 'tell application "Terminal" to close front window' >/dev/null 2>&1 || true
+  exit 0
 fi
+echo
+echo "程式異常結束，代碼 ${CODE}。"
 echo
 read -r -p "按 Enter 關閉…"
