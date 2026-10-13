@@ -166,10 +166,29 @@
     max-height: 240px;
     overflow: auto;
   }
+  .fail-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
   .fail-box h3 {
-    margin: 0 0 8px;
+    margin: 0;
     font-size: 13px;
     color: #ffd7bf;
+  }
+  .fail-retry {
+    flex: 0 0 auto;
+    background: var(--accent);
+    color: #1a1008;
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
   }
   .fail-item {
     display: block;
@@ -608,6 +627,24 @@ function isYtFail(song) {
   return Boolean(song.youtubeError) && !song.youtubeUrl;
 }
 
+function isMockSent(song) {
+  const file = String(song.elitesandFile || "").toLowerCase();
+  return Boolean(song.elitesandOk) && (file === "mock.mp3" || file === "mock");
+}
+
+function reclaimFakeSends() {
+  if (!current) return 0;
+  let count = 0;
+  for (const song of current.songs) {
+    if (!isMockSent(song)) continue;
+    song.elitesandOk = false;
+    song.elitesandFile = "";
+    song.audioError = "先前沒進真正的 Elitesand，請重送";
+    count += 1;
+  }
+  return count;
+}
+
 function isSendFail(song) {
   return Boolean(song.audioError) && !song.elitesandOk && !song.audioFile;
 }
@@ -664,6 +701,26 @@ function failItemButton(song) {
   return button;
 }
 
+function failBox(title, songs, retryLabel, onRetry) {
+  const box = document.createElement("div");
+  box.className = "fail-box";
+  const head = document.createElement("div");
+  head.className = "fail-head";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "fail-retry";
+  retry.textContent = retryLabel;
+  retry.addEventListener("click", (event) => {
+    event.preventDefault();
+    onRetry();
+  });
+  head.append(heading, retry);
+  box.append(head, ...songs.map(failItemButton));
+  return box;
+}
+
 function renderFailPanel() {
   const yt = ytFailedSongs();
   const sent = sendFailedSongs();
@@ -675,20 +732,20 @@ function renderFailPanel() {
   failPanel.hidden = false;
   const boxes = [];
   if (yt.length) {
-    const box = document.createElement("div");
-    box.className = "fail-box";
-    const heading = document.createElement("h3");
-    heading.textContent = `YouTube 搜尋失敗 ${yt.length} 首（點歌名跳到該列）`;
-    box.append(heading, ...yt.map(failItemButton));
-    boxes.push(box);
+    boxes.push(failBox(
+      `YouTube 搜尋失敗 ${yt.length} 首（點歌名跳到該列）`,
+      yt,
+      `重試這 ${yt.length} 首`,
+      () => searchYoutubeTargets(ytFailedSongs())
+    ));
   }
   if (sent.length) {
-    const box = document.createElement("div");
-    box.className = "fail-box";
-    const heading = document.createElement("h3");
-    heading.textContent = `送到 Elitesand 失敗 ${sent.length} 首（點歌名跳到該列）`;
-    box.append(heading, ...sent.map(failItemButton));
-    boxes.push(box);
+    boxes.push(failBox(
+      `送到 Elitesand 失敗 ${sent.length} 首（點歌名跳到該列）`,
+      sent,
+      `重試這 ${sent.length} 首`,
+      () => sendElitesandTargets(sendFailedSongs())
+    ));
   }
   failPanel.replaceChildren(...boxes);
 }
@@ -738,6 +795,7 @@ function youtubeCell(song) {
 }
 
 function render() {
+  reclaimFakeSends();
   const list = visibleSongs();
   const total = current ? current.songs.length : 0;
   const withUrl = current ? current.songs.filter((song) => song.youtubeUrl).length : 0;
@@ -892,11 +950,10 @@ async function searchOneYoutube(song) {
   song.youtubeError = "";
 }
 
-youtubeSearchButton.addEventListener("click", async () => {
+async function searchYoutubeTargets(targets) {
   if (!current || youtubeSearching) return;
-  const targets = visibleSongs().filter((song) => !song.youtubeUrl);
   if (!targets.length) {
-    setStatus("目前畫面上的歌都已經有 YouTube 網址。", false);
+    setStatus("沒有要重試的 YouTube 失敗項目。", false);
     return;
   }
   youtubeSearching = true;
@@ -928,6 +985,25 @@ youtubeSearchButton.addEventListener("click", async () => {
     youtubeSearchButton.disabled = false;
     youtubeStopButton.hidden = true;
   }
+}
+
+youtubeSearchButton.addEventListener("click", () => {
+  if (!current || youtubeSearching) return;
+  const failed = visibleSongs().filter(isYtFail);
+  const missing = visibleSongs().filter((song) => !song.youtubeUrl);
+  if (failFilter === "yt" || (failed.length && failed.length === missing.length)) {
+    if (!failed.length) {
+      setStatus("目前沒有 YouTube 搜尋失敗的歌。", false);
+      return;
+    }
+    searchYoutubeTargets(failed);
+    return;
+  }
+  if (!missing.length) {
+    setStatus("目前畫面上的歌都已經有 YouTube 網址。若要只重試失敗，請按失敗清單上的「重試這 N 首」。", false);
+    return;
+  }
+  searchYoutubeTargets(missing);
 });
 
 youtubeStopButton.addEventListener("click", () => {
@@ -1029,12 +1105,12 @@ async function refreshElitesandStatus() {
     const response = await fetch("/api/elitesand-status", { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     if (payload && payload.ok && payload.base) {
-      const ver = payload.version ? ` v${payload.version}` : "";
-      elitesandStatusEl.innerHTML = `已連上 Elitesand${ver}（<a href="${payload.base}" target="_blank" rel="noreferrer">${payload.base}</a>）`;
+      const ver = payload.version ? `（版本 ${payload.version}）` : "";
+      elitesandStatusEl.innerHTML = `已連上 Elitesand${ver} <a href="${payload.base}" target="_blank" rel="noreferrer">${payload.base}</a>`;
       return true;
     }
   } catch (_) { /* ignore */ }
-  elitesandStatusEl.textContent = "找不到 Elitesand。請先在這台電腦打開 Elitesand Pro（預設埠 3000），再按送到 Elitesand。";
+  elitesandStatusEl.textContent = "找不到 Elitesand。請先在這台電腦打開 Elitesand Pro（預設埠 3000；若被占用會在 3001–3010）。";
   return false;
 }
 
@@ -1054,27 +1130,25 @@ async function sendOneElitesand(song) {
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || "送到 Elitesand 失敗。");
+  const filename = String(payload.filename || "");
+  if (/^mock(\.mp3)?$/i.test(filename) || String(payload.title || "") === "mock track") {
+    throw new Error("連到的不是 Elitesand Pro（假服務）。請只留 Elitesand 視窗再開一次。");
+  }
   song.elitesandOk = true;
-  song.elitesandFile = payload.filename || "";
+  song.elitesandFile = filename;
   song.elitesandSkipped = Boolean(payload.skipped);
   song.audioError = "";
 }
 
-sendElitesandButton.addEventListener("click", async () => {
+async function sendElitesandTargets(targets) {
   if (!current || elitesandSending) return;
   const online = await refreshElitesandStatus();
   if (!online) {
-    setStatus("請先打開 Elitesand Pro（預設 http://127.0.0.1:3000），再按一次。", true);
+    setStatus("請先打開 Elitesand Pro（預設 http://127.0.0.1:3000；被占用會改 3001–3010），再按一次。", true);
     return;
   }
-  const targets = visibleSongs().filter((song) => song.youtubeUrl && !song.elitesandOk);
   if (!targets.length) {
-    const missingSearch = visibleSongs().filter((song) => !song.youtubeUrl).length;
-    if (missingSearch) {
-      setStatus("請先按「搜尋 YouTube」找到伴奏網址，再送到 Elitesand。", true);
-    } else {
-      setStatus("目前畫面上的歌都已送進 Elitesand。", false);
-    }
+    setStatus("沒有要重試的送出失敗項目。", false);
     return;
   }
   elitesandSending = true;
@@ -1095,6 +1169,8 @@ sendElitesandButton.addEventListener("click", async () => {
         if (song.elitesandSkipped) skipped += 1;
         else ok += 1;
       } catch (error) {
+        song.elitesandOk = false;
+        song.elitesandFile = "";
         song.audioError = error.message || "送到 Elitesand 失敗";
         failed += 1;
         if (/需要 PIN/.test(song.audioError)) {
@@ -1105,7 +1181,7 @@ sendElitesandButton.addEventListener("click", async () => {
       render();
     }
     if (pinStop) {
-      setStatus("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。失敗的歌在表格上方。", true);
+      setStatus("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。失敗的歌在表格上方，可按「重試這 N 首」。", true);
     } else {
       const done = `成功 ${ok}，已在清單裡 ${skipped}，失敗 ${failed}。`;
       const prefix = elitesandStopRequested
@@ -1119,6 +1195,31 @@ sendElitesandButton.addEventListener("click", async () => {
     elitesandStopButton.hidden = true;
     refreshElitesandStatus();
   }
+}
+
+sendElitesandButton.addEventListener("click", () => {
+  if (!current || elitesandSending) return;
+  reclaimFakeSends();
+  const failed = failFilter === "es" ? sendFailedSongs() : visibleSongs().filter(isSendFail);
+  const pending = visibleSongs().filter((song) => song.youtubeUrl && !song.elitesandOk);
+  if (failFilter === "es" || (failed.length && failed.length === pending.length)) {
+    if (!failed.length) {
+      setStatus("目前沒有送出失敗的歌。", false);
+      return;
+    }
+    sendElitesandTargets(failed);
+    return;
+  }
+  if (!pending.length) {
+    const missingSearch = visibleSongs().filter((song) => !song.youtubeUrl).length;
+    if (missingSearch) {
+      setStatus("請先按「搜尋 YouTube」找到伴奏網址，再送到 Elitesand。", true);
+    } else {
+      setStatus("目前畫面上的歌都已送進 Elitesand。失敗的請按清單上的「重試這 N 首」。", false);
+    }
+    return;
+  }
+  sendElitesandTargets(pending);
 });
 
 elitesandStopButton.addEventListener("click", () => {

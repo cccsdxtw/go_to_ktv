@@ -788,33 +788,59 @@ def elitesand_base_override():
     return raw or ""
 
 
+def is_elitesand_health(payload):
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("ytdlp") is not None or payload.get("audioDir") is not None:
+        return False
+    if payload.get("status") != "ok":
+        return False
+    version = str(payload.get("version") or "").strip()
+    if not version or version.lower() == "mock":
+        return False
+    if payload.get("timestamp") is None:
+        return False
+    return True
+
+
+def probe_elitesand(base):
+    url = f"{base}/api/health"
+    request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "go-to-ktv"})
+    try:
+        with urllib.request.urlopen(request, timeout=0.8) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
+        return None
+    if not is_elitesand_health(payload):
+        return None
+    return {
+        "ok": True,
+        "base": base,
+        "port": payload.get("port"),
+        "version": str(payload.get("version") or ""),
+    }
+
+
 def find_elitesand():
     override = elitesand_base_override()
     bases = [override] if override else [f"http://127.0.0.1:{port}" for port in ELITESAND_PORTS]
     for base in bases:
-        url = f"{base}/api/health"
-        request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "go-to-ktv"})
-        try:
-            with urllib.request.urlopen(request, timeout=0.8) as response:
-                payload = json.loads(response.read().decode("utf-8", errors="replace"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
-            continue
-        if not isinstance(payload, dict):
-            continue
-        if payload.get("status") == "ok" or payload.get("ok") is True:
-            return {
-                "ok": True,
-                "base": base,
-                "port": payload.get("port"),
-                "version": payload.get("version") or "",
-            }
+        found = probe_elitesand(base)
+        if found:
+            return found
     return None
+
+
+def is_stub_elitesand_track(track):
+    filename = str((track or {}).get("filename") or "").strip().lower()
+    title = str((track or {}).get("title") or "").strip().lower()
+    return filename == "mock.mp3" or title == "mock track"
 
 
 def elitesand_import_youtube(raw_url, pin=""):
     found = find_elitesand()
     if not found:
-        raise SongListError("找不到正在跑的 Elitesand Pro。請先在這台電腦打開 Elitesand，再按一次（預設 http://127.0.0.1:3000）。")
+        raise SongListError("找不到正在跑的 Elitesand Pro。請先在這台電腦打開 Elitesand，再按一次（預設 http://127.0.0.1:3000）。若 3000 被其他程式佔走，Elitesand 可能在 3001 起跳。")
     _video_id, watch_url = parse_watch_url(raw_url)
     body = json.dumps({"url": watch_url, "isBatch": True}).encode("utf-8")
     headers = {
@@ -861,12 +887,15 @@ def elitesand_import_youtube(raw_url, pin=""):
     if status >= 400 or not payload.get("success"):
         raise SongListError(str(payload.get("error") or "Elitesand 下載失敗。")[:240])
     track = payload.get("track") or {}
+    if is_stub_elitesand_track(track):
+        raise SongListError("連到的不是 Elitesand Pro（假服務／測試回應）。請關掉佔用 3000 的舊程式，只留 Elitesand 視窗再開一次。")
     return {
         "skipped": False,
         "title": track.get("title") or "",
         "filename": track.get("filename") or "",
         "id": track.get("id") or "",
         "elitesand": found["base"],
+        "version": found.get("version") or "",
     }
 
 
