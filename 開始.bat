@@ -5,9 +5,10 @@ title 歌單轉入
 chcp 65001 >nul
 
 echo.
-echo 歌單轉入啟動中...
+echo 歌單轉入 v0.4.3 啟動中...
 echo 這個黑視窗請留著，用完再關。
-echo 請不要同時打開「啟動記錄.txt」，否則 Windows 會鎖檔。
+echo 正確網頁標題是「歌單轉入」，不是「哈娜比77 歌單」。
+echo 若還是舊畫面，工作管理員請結束所有 python.exe 後再雙擊一次。
 echo.
 
 set "PY="

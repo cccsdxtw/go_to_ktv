@@ -21,7 +21,7 @@ HOST = os.environ.get("GO_TO_KTV_HOST", "0.0.0.0").strip() or "0.0.0.0"
 PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
-APP_VERSION = "0.4.2"
+APP_VERSION = "0.4.3"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{2,40}$")
 PAGE_PATH_RE = re.compile(r"^/t/([A-Za-z0-9_]{2,40})(?:/songs)?/?$")
@@ -407,6 +407,7 @@ class Handler(BaseHTTPRequestHandler):
             body = INDEX.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -479,8 +480,24 @@ def local_ips():
     return sorted(names)
 
 
-def open_browser():
-    url = f"http://127.0.0.1:{PORT}"
+def bind_server(host, start_port, tries=20):
+    last_error = None
+    for port in range(start_port, start_port + tries):
+        try:
+            server = ThreadingHTTPServer((host, port), Handler)
+            if port != start_port:
+                print(f"注意：{start_port} 已被占用（多半是舊的歌單程式還在跑）。", flush=True)
+                print("已改用新埠，請看新開的分頁，不要再用舊的 8765。", flush=True)
+                print("可在工作管理員結束 python.exe 後，下次就會回到 8765。", flush=True)
+            return server, port
+        except OSError as error:
+            last_error = error
+            print(f"埠 {port} 無法使用，改試 {port + 1}…", flush=True)
+    raise OSError(f"找不到可用埠（從 {start_port} 試了 {tries} 個）。最後錯誤：{last_error}") from last_error
+
+
+def open_browser(port):
+    url = f"http://127.0.0.1:{port}"
     try:
         webbrowser.open(url)
     except Exception as error:
@@ -494,15 +511,17 @@ def main():
         print(f"yt-dlp: {ytdlp}", flush=True)
     else:
         print("提醒：尚未找到 yt-dlp，YouTube 搜尋會失敗。啟動器會試著自動安裝。", flush=True)
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"監聽 {HOST}:{PORT}（v{APP_VERSION}）", flush=True)
-    print(f"本機打開 http://127.0.0.1:{PORT}", flush=True)
+    server, port = bind_server(HOST, PORT)
+    print(f"歌單轉入 v{APP_VERSION}", flush=True)
+    print(f"監聽 {HOST}:{port}", flush=True)
+    print(f"請打開 http://127.0.0.1:{port}", flush=True)
+    print("正確畫面標題是「歌單轉入」，不是「哈娜比77 歌單」。", flush=True)
     if HOST in {"0.0.0.0", "::"}:
         for ip in local_ips():
             if ip != "127.0.0.1":
-                print(f"遠端／區網可試 http://{ip}:{PORT}", flush=True)
+                print(f"遠端／區網可試 http://{ip}:{port}", flush=True)
     if os.environ.get("GO_TO_KTV_NO_BROWSER", "").strip() not in {"1", "true", "yes"}:
-        threading.Timer(0.6, open_browser).start()
+        threading.Timer(0.6, lambda: open_browser(port)).start()
     server.serve_forever()
 
 
