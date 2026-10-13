@@ -1,21 +1,17 @@
 # go_to_ktv
 
-把歌單轉成 Elitesand Pro 可匯入的格式。也支援匯出／讀入 CSV、試算表。版本 **v0.2.0**。
-
-兩種進法：
-
-1. 貼上 StreamerSonglist 公開歌單網址，本機幫你抓
-2. 帶 CSV／試算表進來（上傳或貼上），轉成需要的 json
+把歌單轉成 Elitesand Pro 可匯入的格式。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube 網址。版本 **v0.3.0**。
 
 ## 需求
 
 - Python 3.10+
+- `pip install -r requirements.txt`（會裝 `yt-dlp`，給 YouTube 搜尋用）
 - 網址抓歌時要能連到 `streamersonglist.com`
-- CSV／試算表轉入只在瀏覽器解析，不用上網
 
 ## 執行
 
 ```bash
+pip install -r requirements.txt
 python server.py
 ```
 
@@ -25,25 +21,23 @@ python server.py
 
 1. 貼上 `https://streamersonglist.com/t/名稱/songs`
 2. 按「抓取歌單」
-3. 可搜尋、依屬性篩選
-4. 下載 CSV／複製到試算表，或下載 Elitesand 歌單
 
 ### 從 CSV／試算表
 
 1. 上傳 `.csv`，或從 Excel／Google 試算表複製後貼上
 2. 按「轉成歌單」
-3. 下載 Elitesand 歌單
 
-表頭建議：
+表頭建議：`標題`／`歌名`、`歌手`／`artist`。沒有表頭時，預設第一欄歌名、第二欄歌手。
 
-| 標題 | 歌手 | 屬性 | 上次播放 | 播放次數 |
-| --- | --- | --- | --- | --- |
+### 搜 YouTube 再匯出
 
-也接受 `歌名`／`title`、`藝術家`／`artist` 等常見別名。沒有表頭時，預設第一欄歌名、第二欄歌手。
+1. 歌單出現後，按「搜尋 YouTube」（只處理目前畫面上、還沒有網址的歌）
+2. 表格會顯示找到的影片；不對可以之後再改
+3. 按「下載 Elitesand 歌單」
+
+有 YouTube 網址的歌會寫進 json 的 `url`，Elitesand 匯入後比較有機會直接抓音訊。搜尋結果可能是翻唱或錯版本，請先看一眼。
 
 ## 匯入 Elitesand Pro
-
-Elitesand Pro 匯入時不會開系統檔案視窗，只列出固定資料夾裡的 json：
 
 ```text
 %APPDATA%\Elitesand Pro\data\playlist-exports
@@ -55,15 +49,14 @@ Elitesand Pro 匯入時不會開系統檔案視窗，只列出固定資料夾裡
 C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports
 ```
 
-把下載的 json 放進去（資料夾沒有就先建），再在程式裡按匯入、選這份歌單。
-
-清單帶的是歌名和歌手。要播得出聲音，還得在 Elitesand 裡為每首歌加上 YouTube 連結或本機音檔。
+把下載的 json 放進去，再在程式裡匯入。
 
 ## 注意
 
-- 網址來源只讀 `streamersonglist.com` 的公開歌單
+- 網址來源只讀 `streamersonglist.com` 公開歌單
 - 表格來源不把檔案內容送到伺服器
-- CSV 用 UTF-8（含 BOM），Excel 可直接開
+- YouTube 搜尋走本機 `yt-dlp`
+- CSV 用 UTF-8（含 BOM）
 
 ## 倉庫
 
