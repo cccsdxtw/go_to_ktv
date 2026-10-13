@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """本機小測試：檔名、YouTube 網址解析、下載 API 拒絕無效網址。"""
 
+import io
 import json
+import os
 import tempfile
 import unittest
+import urllib.error
+from email.message import Message
 from pathlib import Path
 from unittest import mock
 
@@ -194,7 +198,120 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.5.4")
+        self.assertEqual(server.APP_VERSION, "0.6.0")
+
+
+class FakeResponse:
+    def __init__(self, payload, status=200):
+        self._payload = json.dumps(payload).encode("utf-8")
+        self.status = status
+
+    def read(self):
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+class FakeHTTPError(urllib.error.HTTPError):
+    def __init__(self, code, payload):
+        super().__init__(
+            "http://127.0.0.1:3000/api/youtube",
+            code,
+            "err",
+            hdrs=Message(),
+            fp=io.BytesIO(json.dumps(payload).encode("utf-8")),
+        )
+
+
+class ElitesandProxyTests(unittest.TestCase):
+    def test_find_scans_ports(self):
+        calls = []
+
+        def fake_urlopen(request, timeout=0):
+            calls.append(request.full_url)
+            if request.full_url.endswith(":3001/api/health"):
+                return FakeResponse({"status": "ok", "version": "1.2.3", "port": 3001})
+            raise urllib.error.URLError("offline")
+
+        with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": ""}, clear=False), mock.patch.object(
+            server.urllib.request, "urlopen", side_effect=fake_urlopen
+        ):
+            found = server.find_elitesand()
+        self.assertTrue(found["ok"])
+        self.assertEqual(found["base"], "http://127.0.0.1:3001")
+        self.assertEqual(found["version"], "1.2.3")
+        self.assertTrue(any(":3000/api/health" in url for url in calls))
+
+    def test_find_override(self):
+        def fake_urlopen(request, timeout=0):
+            if request.full_url == "http://127.0.0.1:3999/api/health":
+                return FakeResponse({"ok": True, "version": "dev"})
+            raise urllib.error.URLError("offline")
+
+        with mock.patch.dict(os.environ, {"GO_TO_KTV_ELITESAND": "http://127.0.0.1:3999"}, clear=False), mock.patch.object(
+            server.urllib.request, "urlopen", side_effect=fake_urlopen
+        ):
+            found = server.find_elitesand()
+        self.assertEqual(found["base"], "http://127.0.0.1:3999")
+
+    def test_import_missing_app(self):
+        with mock.patch.object(server, "find_elitesand", return_value=None):
+            with self.assertRaises(server.SongListError) as ctx:
+                server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E")
+        self.assertIn("找不到", str(ctx.exception))
+
+    def test_import_posts_batch_and_pin(self):
+        captured = {}
+
+        def fake_urlopen(request, timeout=0):
+            captured["url"] = request.full_url
+            captured["method"] = request.get_method()
+            captured["body"] = json.loads(request.data.decode("utf-8"))
+            captured["pin"] = request.headers.get("X-pin") or request.headers.get("X-Pin")
+            return FakeResponse(
+                {
+                    "success": True,
+                    "track": {"id": "abc", "title": "打上花火", "filename": "song.mp3"},
+                }
+            )
+
+        with mock.patch.object(
+            server, "find_elitesand", return_value={"ok": True, "base": "http://127.0.0.1:3000"}
+        ), mock.patch.object(server.urllib.request, "urlopen", side_effect=fake_urlopen):
+            result = server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E", "1234")
+        self.assertFalse(result["skipped"])
+        self.assertEqual(result["filename"], "song.mp3")
+        self.assertEqual(captured["url"], "http://127.0.0.1:3000/api/youtube")
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(captured["body"]["url"], "https://www.youtube.com/watch?v=lOL3CEton6E")
+        self.assertTrue(captured["body"]["isBatch"])
+        self.assertEqual(captured["pin"], "1234")
+
+    def test_import_duplicate(self):
+        def fake_urlopen(request, timeout=0):
+            raise FakeHTTPError(409, {"code": "DUPLICATE_SONG", "existing": {"title": "已有", "filename": "old.mp3"}})
+
+        with mock.patch.object(
+            server, "find_elitesand", return_value={"ok": True, "base": "http://127.0.0.1:3000"}
+        ), mock.patch.object(server.urllib.request, "urlopen", side_effect=fake_urlopen):
+            result = server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E")
+        self.assertTrue(result["skipped"])
+        self.assertEqual(result["filename"], "old.mp3")
+
+    def test_import_pin_required(self):
+        def fake_urlopen(request, timeout=0):
+            raise FakeHTTPError(401, {"code": "PIN_REQUIRED", "error": "PIN required"})
+
+        with mock.patch.object(
+            server, "find_elitesand", return_value={"ok": True, "base": "http://127.0.0.1:3000"}
+        ), mock.patch.object(server.urllib.request, "urlopen", side_effect=fake_urlopen):
+            with self.assertRaises(server.SongListError) as ctx:
+                server.elitesand_import_youtube("https://youtu.be/lOL3CEton6E")
+        self.assertIn("PIN", str(ctx.exception))
 
 
 if __name__ == "__main__":

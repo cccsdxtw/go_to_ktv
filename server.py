@@ -25,7 +25,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.5.4"
+APP_VERSION = "0.6.0"
 ALLOWED_HOSTS = {"streamersonglist.com", "www.streamersonglist.com"}
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -40,6 +40,8 @@ MAX_PAGES = 80
 MAX_SONGS = 5000
 YTDLP_TIMEOUT_SEC = 45
 DOWNLOAD_TIMEOUT_SEC = 180
+ELITESAND_TIMEOUT_SEC = 300
+ELITESAND_PORTS = list(range(3000, 3011))
 AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".opus", ".aac", ".wav", ".flac", ".webm"}
 
 HOLE = -1
@@ -781,6 +783,93 @@ def download_youtube_audio(raw_url, title, artist, browser="", use_cookies=False
     }
 
 
+def elitesand_base_override():
+    raw = os.environ.get("GO_TO_KTV_ELITESAND", "").strip().rstrip("/")
+    return raw or ""
+
+
+def find_elitesand():
+    override = elitesand_base_override()
+    bases = [override] if override else [f"http://127.0.0.1:{port}" for port in ELITESAND_PORTS]
+    for base in bases:
+        url = f"{base}/api/health"
+        request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "go-to-ktv"})
+        try:
+            with urllib.request.urlopen(request, timeout=0.8) as response:
+                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("status") == "ok" or payload.get("ok") is True:
+            return {
+                "ok": True,
+                "base": base,
+                "port": payload.get("port"),
+                "version": payload.get("version") or "",
+            }
+    return None
+
+
+def elitesand_import_youtube(raw_url, pin=""):
+    found = find_elitesand()
+    if not found:
+        raise SongListError("找不到正在跑的 Elitesand Pro。請先在這台電腦打開 Elitesand，再按一次（預設 http://127.0.0.1:3000）。")
+    _video_id, watch_url = parse_watch_url(raw_url)
+    body = json.dumps({"url": watch_url, "isBatch": True}).encode("utf-8")
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "go-to-ktv",
+    }
+    pin = str(pin or "").strip()
+    if pin:
+        headers["X-Pin"] = pin
+    request = urllib.request.Request(
+        f"{found['base']}/api/youtube",
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=ELITESAND_TIMEOUT_SEC) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+            status = getattr(response, "status", 200)
+    except urllib.error.HTTPError as error:
+        raw = error.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = {"error": raw[:200] or f"Elitesand 回傳 {error.code}"}
+        status = error.code
+    except urllib.error.URLError as error:
+        raise SongListError("連不上 Elitesand，請確認程式還開著。") from error
+    except TimeoutError as error:
+        raise SongListError("Elitesand 下載逾時，請稍後再試。") from error
+    if not isinstance(payload, dict):
+        raise SongListError("Elitesand 回傳無法讀取。")
+    if status == 401 or payload.get("code") == "PIN_REQUIRED":
+        raise SongListError("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。")
+    if payload.get("code") == "DUPLICATE_SONG":
+        existing = payload.get("existing") or {}
+        return {
+            "skipped": True,
+            "title": existing.get("title") or "",
+            "filename": existing.get("filename") or "",
+            "elitesand": found["base"],
+        }
+    if status >= 400 or not payload.get("success"):
+        raise SongListError(str(payload.get("error") or "Elitesand 下載失敗。")[:240])
+    track = payload.get("track") or {}
+    return {
+        "skipped": False,
+        "title": track.get("title") or "",
+        "filename": track.get("filename") or "",
+        "id": track.get("id") or "",
+        "elitesand": found["base"],
+    }
+
+
 def open_audio_folder():
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     folder = str(AUDIO_DIR)
@@ -835,6 +924,10 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path == "/api/elitesand-status":
+            found = find_elitesand()
+            self.respond_json(200, found or {"ok": False})
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -875,6 +968,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             skipped = " skip" if result.get("skipped") else ""
             print(f"dl{skipped}: {result['videoId']} -> {result['filename']}", flush=True)
+            self.respond_json(200, result)
+            return
+        if path == "/api/elitesand-import":
+            try:
+                incoming = read_json_body(self, 12000, "請提供 YouTube 網址。")
+                result = elitesand_import_youtube(incoming.get("url"), incoming.get("pin"))
+            except SongListError as error:
+                self.respond_json(400, {"error": str(error)})
+                return
+            skipped = " skip" if result.get("skipped") else ""
+            print(f"es{skipped}: {result.get('title') or ''} -> {result.get('filename')}", flush=True)
             self.respond_json(200, result)
             return
         if path == "/api/open-audio-folder":

@@ -140,7 +140,7 @@
     font-size: 13px;
   }
   .browser-pick[hidden] { display: none !important; }
-  .browser-pick select {
+  .browser-pick select, .pin-input {
     background: #151821;
     color: var(--text);
     border: 1px solid var(--line);
@@ -148,6 +148,7 @@
     padding: 8px 10px;
     font: inherit;
   }
+  .pin-input { width: 140px; }
   td.err {
     max-width: 280px;
     color: var(--danger);
@@ -203,8 +204,8 @@
 </head>
 <body>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.5.4</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。免登入網站也不是用你的帳號，是伺服器假裝瀏覽器去抓；這裡改成本機模擬 Chrome，<strong>預設不讀你的 Google 帳號</strong>。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.0</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，再按「送到 Elitesand 下載」——<strong>用 Elitesand 自己的下載</strong>（請先開著 Elitesand）。不必另存一份、也不用登入這個工具。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
@@ -237,6 +238,7 @@
       <div>
         <h2 id="list-title"></h2>
         <p class="meta" id="list-meta"></p>
+        <p class="meta" id="elitesand-status">正在找 Elitesand…</p>
       </div>
       <div class="actions">
         <button class="ghost" id="copy" type="button">複製到試算表</button>
@@ -256,9 +258,12 @@
             <option value="brave">Brave</option>
           </select>
         </label>
-        <button class="primary" id="download-audio" type="button">下載全部音檔</button>
-        <button class="ghost" id="audio-stop" type="button" hidden>停止下載</button>
-        <button class="ghost" id="open-audio-folder" type="button">開啟音檔資料夾</button>
+        <button class="primary" id="send-elitesand" type="button">送到 Elitesand 下載</button>
+        <button class="ghost" id="elitesand-stop" type="button" hidden>停止送出</button>
+        <input class="pin-input" id="elitesand-pin" type="password" placeholder="PIN（有設才填）" autocomplete="off">
+        <button class="ghost" id="download-audio" type="button">本機另存音檔</button>
+        <button class="ghost" id="audio-stop" type="button" hidden>停止另存</button>
+        <button class="ghost" id="open-audio-folder" type="button">開啟另存資料夾</button>
         <button class="ghost" id="download-elitesand" type="button">下載 Elitesand 歌單</button>
       </div>
     </div>
@@ -275,7 +280,7 @@
             <th>歌手</th>
             <th>屬性</th>
             <th>YouTube</th>
-            <th>音檔</th>
+            <th>Elitesand</th>
             <th>上次播放</th>
             <th class="num">播放次數</th>
           </tr>
@@ -283,10 +288,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>那些 YT 下載網頁也不用你的帳號</strong>——是他們的電腦去跟 YouTube 拿。這裡同樣不讀你的 Google 登入，改成本機模擬 Chrome。抓好後按「開啟音檔資料夾」，一次拖進 Elitesand 右邊本機檔案。只有仍然被擋時，才考慮下載專用帳號（不要用日常主帳號）。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube 後按「送到 Elitesand 下載」。會一首一首交給本機 Elitesand（預設埠 3000），用它原本就會的抓檔與歌詞，不必再拖檔、也不用把 Google 帳號交給這個工具。Elitesand 有設 PIN 才要填。「本機另存」只是備用。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋與音檔下載走本機 yt-dlp。版本 v0.5.4。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。版本 v0.6.0。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -300,6 +305,10 @@ const copyYoutubeButton = document.getElementById("copy-youtube");
 const downloadAudioButton = document.getElementById("download-audio");
 const audioStopButton = document.getElementById("audio-stop");
 const openAudioFolderButton = document.getElementById("open-audio-folder");
+const sendElitesandButton = document.getElementById("send-elitesand");
+const elitesandStopButton = document.getElementById("elitesand-stop");
+const elitesandPinInput = document.getElementById("elitesand-pin");
+const elitesandStatusEl = document.getElementById("elitesand-status");
 const cookieBrowserSelect = document.getElementById("cookie-browser");
 const useCookiesInput = document.getElementById("use-cookies");
 const browserPickWrap = document.getElementById("browser-pick-wrap");
@@ -313,6 +322,8 @@ let youtubeSearching = false;
 let youtubeStopRequested = false;
 let audioDownloading = false;
 let audioStopRequested = false;
+let elitesandSending = false;
+let elitesandStopRequested = false;
 
 const TITLE_ALIASES = new Set(["標題", "歌名", "歌曲", "曲名", "title", "song", "song title", "name", "曲目"]);
 const ARTIST_ALIASES = new Set(["歌手", "藝術家", "演唱", "演唱者", "artist", "singer", "performer"]);
@@ -345,6 +356,8 @@ async function detectServer() {
   }
 }
 detectServer();
+refreshElitesandStatus();
+setInterval(refreshElitesandStatus, 8000);
 
 function networkErrorMessage(error, action) {
   const message = String(error && error.message || "");
@@ -557,6 +570,7 @@ function showList(payload) {
   }));
   resultEl.classList.add("show");
   render();
+  refreshElitesandStatus();
 }
 
 function visibleSongs() {
@@ -577,13 +591,17 @@ function audioCell(song) {
     td.textContent = song.audioFile;
     return td;
   }
+  if (song.elitesandOk) {
+    td.textContent = song.elitesandFile || "已進 Elitesand";
+    return td;
+  }
   if (song.audioError) {
     td.className = "err";
     td.textContent = song.audioError;
     td.title = song.audioError;
     return td;
   }
-  td.textContent = song.youtubeUrl ? "尚未下載" : "—";
+  td.textContent = song.youtubeUrl ? "尚未送出" : "—";
   td.style.color = "var(--muted)";
   return td;
 }
@@ -813,7 +831,7 @@ copyYoutubeButton.addEventListener("click", async () => {
   const previous = copyYoutubeButton.textContent;
   copyYoutubeButton.textContent = `已複製 ${urls.length} 條`;
   setTimeout(() => { copyYoutubeButton.textContent = previous; }, 1400);
-  setStatus(`已複製 ${urls.length} 條 YouTube 網址。Elitesand 右邊貼單支網址仍是一首一首；要一次下載請改用「下載全部音檔」。`, false);
+  setStatus(`已複製 ${urls.length} 條 YouTube 網址。建議改按「送到 Elitesand 下載」，用 Elitesand 自己抓檔。`, false);
 });
 
 const BROWSER_KEY = "go_to_ktv_browser";
@@ -912,6 +930,113 @@ downloadAudioButton.addEventListener("click", async () => {
 audioStopButton.addEventListener("click", () => {
   audioStopRequested = true;
   setStatus("正在停止下載…", false);
+});
+
+async function refreshElitesandStatus() {
+  if (location.protocol === "file:") {
+    elitesandStatusEl.textContent = "請用「開始」開這個頁面，才能連本機 Elitesand。";
+    return false;
+  }
+  try {
+    const response = await fetch("/api/elitesand-status", { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (payload && payload.ok && payload.base) {
+      const ver = payload.version ? ` v${payload.version}` : "";
+      elitesandStatusEl.innerHTML = `已連上 Elitesand${ver}（<a href="${payload.base}" target="_blank" rel="noreferrer">${payload.base}</a>）`;
+      return true;
+    }
+  } catch (_) { /* ignore */ }
+  elitesandStatusEl.textContent = "找不到 Elitesand。請先在這台電腦打開 Elitesand Pro（預設埠 3000），再按送到 Elitesand。";
+  return false;
+}
+
+async function sendOneElitesand(song) {
+  let response;
+  try {
+    response = await fetch("/api/elitesand-import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: song.youtubeUrl,
+        pin: elitesandPinInput.value.trim()
+      })
+    });
+  } catch (error) {
+    throw new Error(networkErrorMessage(error, "送到 Elitesand"));
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "送到 Elitesand 失敗。");
+  song.elitesandOk = true;
+  song.elitesandFile = payload.filename || "";
+  song.elitesandSkipped = Boolean(payload.skipped);
+  song.audioError = "";
+}
+
+sendElitesandButton.addEventListener("click", async () => {
+  if (!current || elitesandSending) return;
+  const online = await refreshElitesandStatus();
+  if (!online) {
+    setStatus("請先打開 Elitesand Pro（預設 http://127.0.0.1:3000），再按一次。", true);
+    return;
+  }
+  const targets = visibleSongs().filter((song) => song.youtubeUrl && !song.elitesandOk);
+  if (!targets.length) {
+    const missingSearch = visibleSongs().filter((song) => !song.youtubeUrl).length;
+    if (missingSearch) {
+      setStatus("請先按「搜尋 YouTube」找到伴奏網址，再送到 Elitesand。", true);
+    } else {
+      setStatus("目前畫面上的歌都已送進 Elitesand。", false);
+    }
+    return;
+  }
+  elitesandSending = true;
+  elitesandStopRequested = false;
+  sendElitesandButton.disabled = true;
+  elitesandStopButton.hidden = false;
+  let ok = 0;
+  let skipped = 0;
+  let failed = 0;
+  let pinStop = false;
+  try {
+    for (let i = 0; i < targets.length; i++) {
+      if (elitesandStopRequested) break;
+      const song = targets[i];
+      setStatus(`正在交給 Elitesand ${i + 1}/${targets.length}：${song.title}`, false);
+      try {
+        await sendOneElitesand(song);
+        if (song.elitesandSkipped) skipped += 1;
+        else ok += 1;
+      } catch (error) {
+        song.audioError = error.message || "送到 Elitesand 失敗";
+        failed += 1;
+        if (/需要 PIN/.test(song.audioError)) {
+          pinStop = true;
+          elitesandStopRequested = true;
+        }
+      }
+      render();
+    }
+    const done = `成功 ${ok}，已在清單裡 ${skipped}，失敗 ${failed}`;
+    if (pinStop) {
+      setStatus("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。", true);
+    } else if (elitesandStopRequested) {
+      setStatus(`已停止送出。${done}。已進 Elitesand 的歌可直接在那邊唱。`, failed > 0);
+    } else if (failed && ok + skipped === 0) {
+      setStatus(`送到 Elitesand 失敗。${done}。請確認 Elitesand 還開著，且這台電腦就是跑 Elitesand 的那台。`, true);
+    } else {
+      setStatus(`已交給 Elitesand 下載。${done}。音檔由 Elitesand 自己抓，請到 Elitesand 看進度。`, failed > 0);
+    }
+  } finally {
+    elitesandSending = false;
+    sendElitesandButton.disabled = false;
+    elitesandStopButton.hidden = true;
+    refreshElitesandStatus();
+  }
+});
+
+elitesandStopButton.addEventListener("click", () => {
+  elitesandStopRequested = true;
+  setStatus("正在停止送出…", false);
 });
 
 openAudioFolderButton.addEventListener("click", async () => {
