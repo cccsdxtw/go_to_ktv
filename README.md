@@ -1,48 +1,38 @@
 # go_to_ktv
 
-把歌單轉成 Elitesand Pro 可匯入的格式。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube **伴奏**網址。版本 **v0.3.2**。
+把歌單轉成 Elitesand Pro 可匯入的格式。支援網址抓歌、CSV／試算表，以及用歌名搜 YouTube **伴奏**網址。版本 **v0.4.0**。
 
-## 需求
+## 怎麼用（建議）
 
-- Python 3.10+
-- `pip install -r requirements.txt`（會裝 `yt-dlp`，給 YouTube 搜尋用）
-- 網址抓歌時要能連到 `streamersonglist.com`
+不用自己打指令。
 
-## 執行
+1. 安裝一次 [Python](https://www.python.org/downloads/)（Windows 請勾選 Add to PATH）
+2. 雙擊：
+   - Windows：`開始.bat`
+   - Mac：`開始.command`（若不能執行，終端機跑一次 `chmod +x 開始.command`）
+3. 瀏覽器會自動打開
 
-```bash
-pip install -r requirements.txt
-python server.py
-```
+用完關掉黑色／終端機視窗即可。
 
-瀏覽器打開 http://127.0.0.1:8765
+> 不要只雙擊 `index.html`。網址抓歌與 YouTube 搜尋需要背景小伺服器；「開始」會幫你開好。
 
-遠端／另一台電腦：伺服器預設聽 `0.0.0.0:8765`，請用 `http://那台機器的IP:8765` 打開（不要直接雙擊 `index.html`）。防火牆要放行 8765。若只想本機連：
-
-```bash
-GO_TO_KTV_HOST=127.0.0.1 python server.py
-```
+## 頁面功能
 
 ### 從網址
 
-1. 貼上 `https://streamersonglist.com/t/名稱/songs`
-2. 按「抓取歌單」
+貼上 `https://streamersonglist.com/t/名稱/songs` → 抓取歌單
 
 ### 從 CSV／試算表
 
-1. 上傳 `.csv`，或從 Excel／Google 試算表複製後貼上
-2. 按「轉成歌單」
+上傳 `.csv`，或從 Excel／Google 試算表複製貼上 → 轉成歌單
 
 表頭建議：`標題`／`歌名`、`歌手`／`artist`。沒有表頭時，預設第一欄歌名、第二欄歌手。
 
 ### 搜 YouTube 再匯出
 
-1. 歌單出現後，按「搜尋 YouTube」（只處理目前畫面上、還沒有網址的歌）
-2. 搜尋關鍵字會自動加上「伴奏」，比較容易對到可唱版本
-3. 表格會顯示找到的影片；不對可以之後再改
-4. 按「下載 Elitesand 歌單」
-
-有 YouTube 網址的歌會寫進 json 的 `url`，Elitesand 匯入後比較有機會直接抓音訊。搜尋結果仍可能對錯，請先看一眼。
+1. 按「搜尋 YouTube」（會自動加「伴奏」，並優先挑伴奏／karaoke）
+2. 看一下找到的影片
+3. 按「下載 Elitesand 歌單」
 
 ## 匯入 Elitesand Pro
 
@@ -58,12 +48,25 @@ C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports
 
 把下載的 json 放進去，再在程式裡匯入。
 
+## 進階
+
+若要自己下指令：
+
+```bash
+pip install -r requirements.txt
+python server.py
+```
+
+- 預設聽 `0.0.0.0:8765`，並自動打開瀏覽器
+- 不自動開瀏覽器：`GO_TO_KTV_NO_BROWSER=1`
+- 只聽本機：`GO_TO_KTV_HOST=127.0.0.1`
+
 ## 注意
 
 - 網址來源只讀 `streamersonglist.com` 公開歌單
 - 表格來源不把檔案內容送到伺服器
 - YouTube 搜尋走本機 `yt-dlp`
-- CSV 用 UTF-8（含 BOM）
+- 搜尋結果仍可能對錯，匯出前請看一眼
 
 ## 倉庫
 

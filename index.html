@@ -148,13 +148,32 @@
     font-size: 12px;
   }
   footer { width: min(1100px, calc(100% - 32px)); margin: 16px auto 28px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .banner {
+    display: none;
+    width: min(1100px, calc(100% - 32px));
+    margin: 14px auto 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid #6a3b1d;
+    background: #2a1c12;
+    color: #ffd7bf;
+    line-height: 1.55;
+    font-size: 14px;
+  }
+  .banner.show { display: block; }
+  .banner code {
+    color: #ffe0c2;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>歌單轉入</h1>
-  <p class="lead">可以從 StreamerSonglist 網址抓歌，也可以帶 CSV／試算表進來；再搜 YouTube 伴奏網址，轉成 Elitesand Pro 能抓音訊的歌單。</p>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可從網址抓歌、貼 CSV／試算表，再搜 YouTube 伴奏轉成 Elitesand 歌單。</p>
 </header>
+<div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
 <main>
   <div class="sources">
     <section class="source-card">
@@ -217,7 +236,7 @@
     <p class="import-note">先按「搜尋 YouTube」幫目前畫面上的歌找<strong>伴奏</strong>網址（搜尋會帶「伴奏」），再下載 Elitesand 歌單。Elitesand Pro 匯入不會開檔案視窗，只列出 <code>%APPDATA%\Elitesand Pro\data\playlist-exports</code>（一般是 <code>C:\Users\你的名字\AppData\Roaming\Elitesand Pro\data\playlist-exports</code>）。資料夾沒有就先建，放進 json 後在程式裡匯入。搜尋需要本機已安裝 <code>yt-dlp</code>（<code>pip install yt-dlp</code>）。結果仍可能對到錯版本，匯入前請看一下。</p>
   </section>
 </main>
-<footer>網址來源只讀 streamersonglist.com 公開歌單。表格來源在瀏覽器解析。YouTube 搜尋走本機 yt-dlp，並加上「伴奏」。遠端請用 http://伺服器IP:8765 打開。版本 v0.3.2。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；表格在瀏覽器解析；YouTube 搜尋走本機 yt-dlp 並加「伴奏」。版本 v0.4.0。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -249,6 +268,24 @@ function setStatus(message, isError) {
   statusEl.textContent = message;
   statusEl.classList.toggle("error", Boolean(isError));
 }
+
+async function detectServer() {
+  const banner = document.getElementById("offline-banner");
+  if (location.protocol === "file:") {
+    banner.classList.add("show");
+    return false;
+  }
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    if (!response.ok) throw new Error("bad health");
+    banner.classList.remove("show");
+    return true;
+  } catch (_) {
+    banner.classList.add("show");
+    return false;
+  }
+}
+detectServer();
 
 function networkErrorMessage(error, action) {
   const message = String(error && error.message || "");
