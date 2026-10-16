@@ -26,7 +26,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 _httpd = None
 _bound_port = PORT
 _released = False
@@ -1004,6 +1004,36 @@ def youtube_candidate(item):
     }
 
 
+def parse_ytdlp_search_output(stdout):
+    text = str(stdout or "").strip()
+    if not text:
+        return []
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            entries = payload.get("entries")
+            if isinstance(entries, list):
+                return [item for item in entries if isinstance(item, dict)]
+            if payload.get("id"):
+                return [payload]
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+    except json.JSONDecodeError:
+        pass
+    found = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict) and item.get("id"):
+            found.append(item)
+    return found
+
+
 def search_youtube(title, artist):
     ytdlp = find_ytdlp()
     if not ytdlp:
@@ -1013,10 +1043,10 @@ def search_youtube(title, artist):
         ytdlp,
         f"ytsearch5:{query}",
         "--flat-playlist",
-        "--dump-single-json",
-        "--no-warnings",
         "--skip-download",
-        "--no-playlist",
+        "--no-warnings",
+        "--print",
+        "%(.{id,title,channel,uploader,duration})j",
     ]
     try:
         completed = subprocess.run(
@@ -1034,17 +1064,7 @@ def search_youtube(title, artist):
         detail = (completed.stderr or completed.stdout or "").strip().splitlines()
         message = detail[-1] if detail else "YouTube 搜尋失敗。"
         raise SongListError(message[:240])
-    try:
-        payload = json.loads(completed.stdout or "{}")
-    except json.JSONDecodeError as error:
-        raise SongListError("YouTube 搜尋結果無法讀取。") from error
-    entries = payload.get("entries") if isinstance(payload, dict) else None
-    if isinstance(entries, list):
-        ranked = ranked_youtube_entries(entries)
-    elif isinstance(payload, dict) and payload.get("id"):
-        ranked = [payload]
-    else:
-        ranked = []
+    ranked = ranked_youtube_entries(parse_ytdlp_search_output(completed.stdout))
     candidates = [youtube_candidate(item) for item in ranked if item.get("id")]
     if not candidates:
         raise SongListError("找不到這首歌的 YouTube 結果。")

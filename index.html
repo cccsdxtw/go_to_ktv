@@ -314,6 +314,18 @@
     font-size: 12px;
   }
   .yt-pick a:hover { text-decoration: underline; }
+  .yt-more {
+    align-self: flex-start;
+    margin: 2px 0 0 22px;
+    background: transparent;
+    color: #8eb6ff;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .yt-more:hover { text-decoration: underline; }
   tr.fail-row td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
   tr.flash { background: #3a2424; }
   .fail-panel {
@@ -463,7 +475,7 @@
   </div>
 </div>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.2</span></h1>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.3</span></h1>
   <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。YouTube 來源已有網址可直接送到 Elitesand；其他來源先搜伴奏再送。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
@@ -555,7 +567,7 @@
     <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>YouTube 播放清單已帶網址，可直接按「送到 Elitesand 下載」。StreamerSonglist／KKBOX／Spotify／表格請先「搜尋 YouTube」伴奏再送。會下載進媒體庫並掛上<strong>目前播放清單</strong>。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.2。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.3。</footer>
 <div class="dialog-overlay" id="app-dialog" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
     <h2 id="app-dialog-title"></h2>
@@ -1080,6 +1092,31 @@ function youtubeListenLink(url, title) {
   return link;
 }
 
+function youtubeChoiceRow(song, item, index, pick, group) {
+  const row = document.createElement("div");
+  row.className = "yt-choice";
+  const label = document.createElement("label");
+  const radio = document.createElement("input");
+  radio.type = "radio";
+  radio.name = group;
+  radio.value = String(index);
+  radio.checked = index === pick;
+  radio.setAttribute("aria-label", `選用搜尋結果 ${index + 1}`);
+  radio.addEventListener("change", () => {
+    if (!radio.checked) return;
+    applyYoutubeCandidate(song, index, false);
+    render();
+  });
+  const name = document.createElement("span");
+  name.className = "yt-name";
+  name.textContent = `${index + 1}. ${item.youtubeTitle || item.videoId || "未命名"}`;
+  label.append(radio, name);
+  const listen = youtubeListenLink(item.url, item.youtubeTitle);
+  listen.addEventListener("click", (event) => event.stopPropagation());
+  row.append(label, listen);
+  return row;
+}
+
 function youtubeCell(song) {
   const td = document.createElement("td");
   const candidates = Array.isArray(song.youtubeCandidates) ? song.youtubeCandidates : [];
@@ -1088,30 +1125,34 @@ function youtubeCell(song) {
     wrap.className = "yt-pick";
     const group = `yt-pick-${song.id || current.songs.indexOf(song)}`;
     const pick = Math.min(Math.max(Number(song.youtubePick) || 0, 0), candidates.length - 1);
-    candidates.forEach((item, index) => {
-      const row = document.createElement("div");
-      row.className = "yt-choice";
-      const label = document.createElement("label");
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.name = group;
-      radio.value = String(index);
-      radio.checked = index === pick;
-      radio.setAttribute("aria-label", `選用搜尋結果 ${index + 1}`);
-      radio.addEventListener("change", () => {
-        if (!radio.checked) return;
-        applyYoutubeCandidate(song, index, false);
+    const extra = candidates.length - 1;
+    if (song.youtubeShowAll && extra > 0) {
+      candidates.forEach((item, index) => {
+        wrap.appendChild(youtubeChoiceRow(song, item, index, pick, group));
+      });
+      const hide = document.createElement("button");
+      hide.type = "button";
+      hide.className = "yt-more";
+      hide.textContent = "收合";
+      hide.addEventListener("click", () => {
+        song.youtubeShowAll = false;
         render();
       });
-      const name = document.createElement("span");
-      name.className = "yt-name";
-      name.textContent = `${index + 1}. ${item.youtubeTitle || item.videoId || "未命名"}`;
-      label.append(radio, name);
-      const listen = youtubeListenLink(item.url, item.youtubeTitle);
-      listen.addEventListener("click", (event) => event.stopPropagation());
-      row.append(label, listen);
-      wrap.appendChild(row);
-    });
+      wrap.appendChild(hide);
+    } else {
+      wrap.appendChild(youtubeChoiceRow(song, candidates[pick], pick, pick, group));
+      if (extra > 0) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "yt-more";
+        more.textContent = `另外 ${extra} 筆（去聽／改選）`;
+        more.addEventListener("click", () => {
+          song.youtubeShowAll = true;
+          render();
+        });
+        wrap.appendChild(more);
+      }
+    }
     td.appendChild(wrap);
     return td;
   }
@@ -1346,6 +1387,7 @@ async function searchOneYoutube(song) {
     }];
   }
   applyYoutubeCandidate(song, 0, true);
+  song.youtubeShowAll = false;
   song.youtubeError = "";
 }
 
@@ -1374,7 +1416,8 @@ async function searchYoutubeTargets(targets) {
         song.youtubeError = error.message || "搜尋失敗";
         failed += 1;
       }
-      render();
+      const last = i === targets.length - 1 || youtubeStopRequested;
+      if (last || i % 4 === 3) render();
     }
     const prefix = youtubeStopRequested
       ? `已停止搜尋。成功 ${ok}，失敗 ${failed}。`

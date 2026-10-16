@@ -74,6 +74,16 @@ class YoutubeSearchPickTests(unittest.TestCase):
         self.assertTrue(result["candidates"][0]["url"].endswith("bbb222"))
         self.assertEqual(result["query"], "打上花火 DAOKO 伴奏")
 
+    def test_parse_print_lines(self):
+        stdout = "\n".join(
+            [
+                json.dumps({"id": "aaa", "title": "原唱"}),
+                json.dumps({"id": "bbb", "title": "伴奏"}),
+            ]
+        )
+        found = server.parse_ytdlp_search_output(stdout)
+        self.assertEqual([item["id"] for item in found], ["aaa", "bbb"])
+
 
 class UniquePathTests(unittest.TestCase):
     def test_unique(self):
@@ -231,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.2")
+        self.assertEqual(server.APP_VERSION, "1.0.3")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -250,6 +260,7 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn("去聽", html)
         self.assertIn("yt-pick", html)
         self.assertIn("yt-choice", html)
+        self.assertIn("另外", html)
         self.assertIn("applyYoutubeCandidate", html)
         self.assertIn('id="youtube-stop"', html)
         self.assertIn('id="send-elitesand"', html)
