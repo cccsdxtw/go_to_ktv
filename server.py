@@ -26,7 +26,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 _httpd = None
 _bound_port = PORT
 _released = False
@@ -977,15 +977,31 @@ def instrumental_score(item):
     return score
 
 
-def pick_youtube_entry(entries):
+def ranked_youtube_entries(entries):
     candidates = [item for item in entries if isinstance(item, dict) and item.get("id")]
-    if not candidates:
-        return None
-    ranked = sorted(
-        enumerate(candidates),
-        key=lambda pair: (-instrumental_score(pair[1]), pair[0]),
-    )
-    return ranked[0][1]
+    return [
+        item
+        for _, item in sorted(
+            enumerate(candidates),
+            key=lambda pair: (-instrumental_score(pair[1]), pair[0]),
+        )
+    ]
+
+
+def pick_youtube_entry(entries):
+    ranked = ranked_youtube_entries(entries)
+    return ranked[0] if ranked else None
+
+
+def youtube_candidate(item):
+    video_id = str(item.get("id") or "")
+    return {
+        "videoId": video_id,
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+        "youtubeTitle": item.get("title") or "",
+        "uploader": item.get("uploader") or item.get("channel") or "",
+        "duration": item.get("duration"),
+    }
 
 
 def search_youtube(title, artist):
@@ -1024,20 +1040,22 @@ def search_youtube(title, artist):
         raise SongListError("YouTube 搜尋結果無法讀取。") from error
     entries = payload.get("entries") if isinstance(payload, dict) else None
     if isinstance(entries, list):
-        item = pick_youtube_entry(entries)
+        ranked = ranked_youtube_entries(entries)
     elif isinstance(payload, dict) and payload.get("id"):
-        item = payload
+        ranked = [payload]
     else:
-        item = None
-    if not isinstance(item, dict) or not item.get("id"):
+        ranked = []
+    candidates = [youtube_candidate(item) for item in ranked if item.get("id")]
+    if not candidates:
         raise SongListError("找不到這首歌的 YouTube 結果。")
-    video_id = str(item["id"])
+    picked = candidates[0]
     return {
-        "videoId": video_id,
-        "url": f"https://www.youtube.com/watch?v={video_id}",
-        "youtubeTitle": item.get("title") or "",
-        "uploader": item.get("uploader") or item.get("channel") or "",
-        "duration": item.get("duration"),
+        "videoId": picked["videoId"],
+        "url": picked["url"],
+        "youtubeTitle": picked["youtubeTitle"],
+        "uploader": picked["uploader"],
+        "duration": picked["duration"],
+        "candidates": candidates[:5],
         "query": query,
     }
 
