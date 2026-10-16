@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.7.3")
+        self.assertEqual(server.APP_VERSION, "1.0.0")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
