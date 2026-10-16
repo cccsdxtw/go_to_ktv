@@ -1,6 +1,6 @@
 # go_to_ktv
 
-把歌單轉成 Elitesand Pro 可唱的歌：從網址或表格抓歌，必要時搜 YouTube **伴奏**，再交給 **Elitesand 自己下載**，並掛上目前播放清單。版本 **v1.0.1**（對應 Elitesand Pro **v1.1.0**）。
+把歌單轉成 Elitesand Pro 可唱的歌：從網址或表格抓歌，必要時搜 YouTube **伴奏**，再交給 **Elitesand 自己下載**，並掛上目前播放清單。版本 **v1.0.2**（對應 Elitesand Pro **v1.1.0**）。
 
 影片說明：https://youtu.be/PVoaureN8vg
 
@@ -20,7 +20,7 @@
 1. 貼上網址按「抓取歌單」，或上傳 CSV／從試算表貼上按「轉成歌單」  
    網址支援：**StreamerSonglist**、**YouTube 播放清單／單支影片**、**KKBOX**、**Spotify** 歌單／專輯／歌曲
 2. YouTube 來源已有影片網址，可直接進下一步。其他來源按「搜尋 YouTube」（會加「伴奏」）
-3. 看一下找到的影片；不對就直接在格子裡改歌名／歌手再重搜
+3. 看一下找到的影片。YouTube 欄會列出這次搜到的幾筆，每筆都能按「去聽」；左邊圓點才是要送給 Elitesand 的那支。不對就改歌名／歌手再重搜
 4. 按「**送到 Elitesand 下載**」（按下去會立刻改字，一首一首較久，屬正常）
 
 若 Elitesand 沒開，會跳出「請開啟Elitesand」。全部送完會跳出「已下載完成」，可按「確認」或「關閉程式」。

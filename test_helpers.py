@@ -42,6 +42,39 @@ class YoutubeUrlTests(unittest.TestCase):
             server.parse_watch_url("https://streamersonglist.com/t/x/songs")
 
 
+class YoutubeSearchPickTests(unittest.TestCase):
+    def test_instrumental_ranks_first(self):
+        picked = server.pick_youtube_entry(
+            [
+                {"id": "aaa", "title": "打上花火"},
+                {"id": "bbb", "title": "打上花火 伴奏"},
+                {"id": "ccc", "title": "打上花火 cover"},
+            ]
+        )
+        self.assertEqual(picked["id"], "bbb")
+
+    def test_search_keeps_five_candidates(self):
+        payload = {
+            "entries": [
+                {"id": "aaa111", "title": "打上花火"},
+                {"id": "bbb222", "title": "打上花火 伴奏"},
+                {"id": "ccc333", "title": "打上花火 karaoke"},
+                {"id": "ddd444", "title": "打上花火 cover"},
+                {"id": "eee555", "title": "打上花火 live"},
+            ]
+        }
+        fake = mock.Mock(returncode=0, stdout=json.dumps(payload), stderr="")
+        with mock.patch.object(server, "find_ytdlp", return_value="/usr/bin/yt-dlp"), mock.patch.object(
+            server.subprocess, "run", return_value=fake
+        ):
+            result = server.search_youtube("打上花火", "DAOKO")
+        self.assertEqual(len(result["candidates"]), 5)
+        self.assertEqual(result["videoId"], "bbb222")
+        self.assertEqual(result["candidates"][0]["videoId"], "bbb222")
+        self.assertTrue(result["candidates"][0]["url"].endswith("bbb222"))
+        self.assertEqual(result["query"], "打上花火 DAOKO 伴奏")
+
+
 class UniquePathTests(unittest.TestCase):
     def test_unique(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -198,7 +231,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.1")
+        self.assertEqual(server.APP_VERSION, "1.0.2")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -214,6 +247,10 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn('id="download"', html)
         self.assertIn('id="copy-youtube"', html)
         self.assertIn('id="youtube-search"', html)
+        self.assertIn("去聽", html)
+        self.assertIn("yt-pick", html)
+        self.assertIn("yt-choice", html)
+        self.assertIn("applyYoutubeCandidate", html)
         self.assertIn('id="youtube-stop"', html)
         self.assertIn('id="send-elitesand"', html)
         self.assertIn('id="elitesand-pin"', html)
