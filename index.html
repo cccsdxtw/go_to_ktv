@@ -181,16 +181,35 @@
   .result.show { display: block; }
   .result-head {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     gap: 12px;
-    align-items: flex-end;
-    flex-wrap: wrap;
     margin: 18px 0 8px;
   }
   .result-head h2 { margin: 0 0 4px; font-size: 20px; }
   .meta { margin: 0; color: var(--muted); font-size: 14px; }
   .meta a { color: #8eb6ff; }
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .action-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .action-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .action-row .row-label {
+    flex: 0 0 4.5em;
+    color: #ffd7bf;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
   .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
   input[type="search"] { flex: 1 1 220px; width: auto; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -371,7 +390,7 @@
   </div>
 </div>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.7.1</span></h1>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.7.2</span></h1>
   <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。YouTube 來源已有網址可直接送到 Elitesand；其他來源先搜伴奏再送。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
@@ -409,19 +428,31 @@
         <p class="meta" id="elitesand-status">正在找 Elitesand…</p>
         <p class="hint">找不到 Elitesand、或「送到 Elitesand 下載」一直停住時：看工作列<strong>右下角往上的小箭頭</strong>，把 VPN／虛擬區網（常見如 Radmin VPN、Tailscale、Clash）先<strong>中斷連線</strong>或關掉，改用這台電腦自己的 Wi‑Fi／網路線。用完這個頁面再把它開回去即可。Mac 則在選單列的 VPN／Clash 圖示裡中斷。</p>
       </div>
-      <div class="actions">
-        <button class="ghost" id="copy" type="button">複製到試算表</button>
-        <button class="ghost" id="download" type="button">下載 CSV</button>
-        <button class="ghost" id="youtube-search" type="button">搜尋 YouTube</button>
-        <button class="ghost" id="youtube-stop" type="button" hidden>停止搜尋</button>
-        <button class="ghost" id="copy-youtube" type="button">複製全部 YouTube 網址</button>
-        <button class="primary" id="send-elitesand" type="button">送到 Elitesand 下載</button>
-        <button class="ghost" id="elitesand-stop" type="button" hidden>停止送出</button>
-        <input class="pin-input" id="elitesand-pin" type="password" placeholder="PIN（有設才填）" autocomplete="off">
-        <button class="ghost" id="download-audio" type="button">本機另存音檔</button>
-        <button class="ghost" id="audio-stop" type="button" hidden>停止另存</button>
-        <button class="ghost" id="open-audio-folder" type="button">開啟另存資料夾</button>
-        <button class="ghost" id="download-elitesand" type="button">下載 Elitesand 歌單</button>
+      <div class="action-groups">
+        <div class="action-row">
+          <span class="row-label">下載區</span>
+          <button class="ghost" id="copy" type="button">複製到試算表</button>
+          <button class="ghost" id="download" type="button">下載 CSV</button>
+        </div>
+        <div class="action-row">
+          <span class="row-label">YT區</span>
+          <button class="ghost" id="copy-youtube" type="button">複製全部 YouTube 網址</button>
+          <button class="ghost" id="youtube-search" type="button">搜尋 YouTube</button>
+          <button class="ghost" id="youtube-stop" type="button" hidden>停止搜尋</button>
+        </div>
+        <div class="action-row">
+          <span class="row-label">程式區</span>
+          <button class="primary" id="send-elitesand" type="button">送到 Elitesand 下載</button>
+          <input class="pin-input" id="elitesand-pin" type="password" placeholder="PIN（有設才填）" autocomplete="off">
+          <button class="ghost" id="elitesand-stop" type="button" hidden>停止送出</button>
+        </div>
+        <div class="action-row">
+          <span class="row-label">其他</span>
+          <button class="ghost" id="download-audio" type="button">本機另存音檔</button>
+          <button class="ghost" id="audio-stop" type="button" hidden>停止另存</button>
+          <button class="ghost" id="open-audio-folder" type="button">開啟另存資料夾</button>
+          <button class="ghost" id="download-elitesand" type="button">下載 Elitesand 歌單</button>
+        </div>
       </div>
     </div>
     <div class="toolbar">
@@ -451,7 +482,7 @@
     <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>YouTube 播放清單已帶網址，可直接按「送到 Elitesand 下載」。StreamerSonglist／KKBOX／Spotify／表格請先「搜尋 YouTube」伴奏再送。會下載進媒體庫並掛上<strong>目前播放清單</strong>。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v0.7.1。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v0.7.2。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
