@@ -1,6 +1,6 @@
 # go_to_ktv
 
-把歌單轉成 Elitesand Pro 可唱的歌：搜 YouTube **伴奏**，再交給 **Elitesand 自己下載**，並掛上目前播放清單。版本 **v0.6.7**（對應 Elitesand Pro **v1.1.0**）。
+把歌單轉成 Elitesand Pro 可唱的歌：從網址或表格抓歌，必要時搜 YouTube **伴奏**，再交給 **Elitesand 自己下載**，並掛上目前播放清單。版本 **v0.7.0**（對應 Elitesand Pro **v1.1.0**）。
 
 影片說明：https://youtu.be/PVoaureN8vg
 
@@ -17,9 +17,9 @@
 
 ### 轉歌
 
-1. 貼上 `https://streamersonglist.com/t/名稱/songs` 按「抓取歌單」  
-   或上傳 CSV／從試算表貼上，按「轉成歌單」（表頭用「標題／歌名」「歌手」；沒表頭時第一欄歌名、第二欄歌手）
-2. 按「搜尋 YouTube」（會加「伴奏」，並優先挑伴奏／karaoke）
+1. 貼上網址按「抓取歌單」，或上傳 CSV／從試算表貼上按「轉成歌單」  
+   網址支援：**StreamerSonglist**、**YouTube 播放清單／單支影片**、**KKBOX 歌單／專輯／歌曲**
+2. YouTube 來源已有影片網址，可直接進下一步。其他來源按「搜尋 YouTube」（會加「伴奏」）
 3. 看一下找到的影片；不對就直接在格子裡改歌名／歌手再重搜
 4. 按「**送到 Elitesand 下載**」（按下去會立刻改字，一首一首較久，屬正常）
 
@@ -42,7 +42,7 @@ Elitesand 有設 PIN 才要填。這個工具跟 Elitesand 要在**同一台電�
 - 不要用 Elitesand 的「匯入歌單」代替下載：那只會有歌名和網址，首頁會顯示音檔遺失
 - 搜尋結果仍可能對錯，送出前請看一眼
 - 找不到 Elitesand、或下載卡住：先看它視窗是否開著；仍不行就關掉 VPN／虛擬區網（工作列右下角小箭頭）再試
-- 網址來源只讀 streamersonglist.com 公開歌單
+- 網址來源：StreamerSonglist 公開歌單、YouTube 播放清單／影片、KKBOX 公開歌單／專輯／歌曲
 
 ## 進階（一般不用）
 

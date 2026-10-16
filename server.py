@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """網頁工具：貼上 StreamerSonglist 歌單網址，或從表格轉成 Elitesand 歌單。"""
 
+import html
 import json
 import os
 import re
@@ -25,7 +26,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.6.7"
+APP_VERSION = "0.7.0"
 _httpd = None
 _bound_port = PORT
 _released = False
@@ -37,6 +38,19 @@ YOUTUBE_HOSTS = {
     "music.youtube.com",
     "youtu.be",
 }
+KKBOX_HOSTS = {
+    "kkbox.com",
+    "www.kkbox.com",
+    "play.kkbox.com",
+    "open.kkbox.com",
+    "widget.kkbox.com",
+    "kkbox.fm",
+}
+KKBOX_PATH_RE = re.compile(
+    r"^/(?:[a-z]{2}/[a-z]{2}/)?(playlist|album|song)/([^/?#]+)/?$",
+    re.I,
+)
+PLAYLIST_YTDLP_TIMEOUT_SEC = 120
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{2,40}$")
 PAGE_PATH_RE = re.compile(r"^/t/([A-Za-z0-9_]{2,40})(?:/songs)?/?$")
 MAX_PAGES = 80
@@ -172,7 +186,7 @@ def parse_username(raw_url):
     parsed = urllib.parse.urlparse(text)
     host = (parsed.hostname or "").lower()
     if host not in ALLOWED_HOSTS:
-        raise SongListError("目前只接受 streamersonglist.com 的歌單網址。")
+        raise SongListError("這不是 streamersonglist.com 的歌單網址。")
     match = PAGE_PATH_RE.match(parsed.path)
     if not match:
         raise SongListError("請貼歌單頁網址，例如 https://streamersonglist.com/t/名稱/songs")
@@ -287,7 +301,290 @@ def fetch_songs(username):
         "total": total if total is not None else len(songs),
         "songs": songs,
         "sourceUrl": f"https://streamersonglist.com/t/{username}/songs",
+        "sourceKind": "streamersonglist",
+        "sourceLabel": "StreamerSonglist",
     }
+
+
+def normalize_url(raw_url):
+    text = str(raw_url or "").strip()
+    if not text:
+        raise SongListError("請貼上歌單網址。")
+    if "://" not in text:
+        text = "https://" + text
+    return text
+
+
+def split_title_artist(raw):
+    text = re.sub(r"\s+", " ", str(raw or "")).strip()
+    if not text:
+        return "", ""
+    parts = re.split(r"\s+[-–—]\s+", text, maxsplit=1)
+    if len(parts) == 2:
+        left, right = parts[0].strip(), parts[1].strip()
+        if 1 < len(left) <= 80 and 1 < len(right) <= 80:
+            return right, left
+    return text, ""
+
+
+def http_get_text(url, headers=None, timeout=25):
+    request = urllib.request.Request(
+        url,
+        headers=headers
+        or {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.geturl(), response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise SongListError("找不到這個歌單，請確認網址。") from error
+        raise SongListError("歌單網站暫時沒有回應，請稍後再試。") from error
+    except urllib.error.URLError as error:
+        raise SongListError("連不上歌單網站，請稍後再試。") from error
+
+
+def parse_youtube_playlist_ref(raw_url):
+    text = normalize_url(raw_url)
+    parsed = urllib.parse.urlparse(text)
+    host = (parsed.hostname or "").lower()
+    if host not in YOUTUBE_HOSTS:
+        return None
+    query = urllib.parse.parse_qs(parsed.query)
+    list_id = (query.get("list") or [""])[0].strip()
+    mix = list_id.startswith("RD")
+    if list_id and not mix:
+        return {"kind": "youtube", "listId": list_id, "url": f"https://www.youtube.com/playlist?list={list_id}"}
+    try:
+        video_id, watch_url = parse_watch_url(text)
+        return {"kind": "youtube", "videoId": video_id, "url": watch_url}
+    except SongListError:
+        if list_id:
+            return {"kind": "youtube", "listId": list_id, "url": f"https://www.youtube.com/playlist?list={list_id}"}
+        raise SongListError("請貼 YouTube 播放清單或單支影片網址。") from None
+
+
+def parse_kkbox_ref(raw_url):
+    text = normalize_url(raw_url)
+    parsed = urllib.parse.urlparse(text)
+    host = (parsed.hostname or "").lower()
+    if host not in KKBOX_HOSTS:
+        return None
+    if host == "kkbox.fm":
+        final_url, _body = http_get_text(text)
+        parsed = urllib.parse.urlparse(final_url)
+        host = (parsed.hostname or "").lower()
+        text = final_url
+    query = urllib.parse.parse_qs(parsed.query)
+    item_id = (query.get("id") or [""])[0].strip()
+    item_type = (query.get("type") or [""])[0].strip().lower()
+    if not item_id:
+        path = parsed.path or ""
+        play = re.match(r"^/(playlist|album|song)/([^/?#]+)/?$", path, re.I)
+        match = play or KKBOX_PATH_RE.match(path)
+        if not match:
+            raise SongListError("請貼 KKBOX 歌單、專輯或歌曲網址。")
+        item_type = match.group(1).lower()
+        item_id = match.group(2)
+    if item_type not in {"playlist", "album", "song"}:
+        item_type = "playlist"
+    if not item_id:
+        raise SongListError("請貼 KKBOX 歌單、專輯或歌曲網址。")
+    return {"kind": "kkbox", "itemType": item_type, "itemId": item_id, "url": text}
+
+
+def detect_playlist(raw_url):
+    text = normalize_url(raw_url)
+    parsed = urllib.parse.urlparse(text)
+    host = (parsed.hostname or "").lower()
+    if host in ALLOWED_HOSTS:
+        return {"kind": "streamersonglist", "username": parse_username(text), "url": text}
+    youtube = parse_youtube_playlist_ref(text)
+    if youtube:
+        return youtube
+    kkbox = parse_kkbox_ref(text)
+    if kkbox:
+        return kkbox
+    raise SongListError(
+        "目前支援 StreamerSonglist、YouTube 播放清單／單支影片、KKBOX 歌單／專輯／歌曲。請貼其中一種網址。"
+    )
+
+
+def ytdlp_dump_json(url):
+    ytdlp = find_ytdlp()
+    if not ytdlp:
+        raise SongListError("找不到 yt-dlp。請先執行：pip install yt-dlp")
+    command = [
+        ytdlp,
+        url,
+        "--flat-playlist",
+        "--dump-single-json",
+        "--no-warnings",
+        "--skip-download",
+        "--yes-playlist",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=PLAYLIST_YTDLP_TIMEOUT_SEC,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise SongListError("YouTube 播放清單讀取逾時，請稍後再試。") from error
+    except OSError as error:
+        raise SongListError("無法啟動 yt-dlp。") from error
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip().splitlines()
+        message = detail[-1] if detail else "YouTube 播放清單讀取失敗。"
+        raise SongListError(message[:240])
+    try:
+        payload = json.loads(completed.stdout or "{}")
+    except json.JSONDecodeError as error:
+        raise SongListError("YouTube 播放清單無法讀取。") from error
+    if not isinstance(payload, dict):
+        raise SongListError("YouTube 播放清單無法讀取。")
+    return payload
+
+
+def songs_from_youtube_payload(payload, source_url):
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        entries = [payload] if payload.get("id") else []
+    songs = []
+    for index, item in enumerate(entries, start=1):
+        if not isinstance(item, dict):
+            continue
+        video_id = str(item.get("id") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{6,18}", video_id):
+            continue
+        raw_title = str(item.get("title") or "").strip() or f"未命名 {index}"
+        title, artist = split_title_artist(raw_title)
+        if not artist:
+            channel = str(item.get("uploader") or item.get("channel") or "").strip()
+            channel = re.sub(r"\s*-\s*Topic$", "", channel).strip()
+            artist = channel
+        watch_url = f"https://www.youtube.com/watch?v={video_id}"
+        songs.append(
+            {
+                "id": f"yt-{video_id}",
+                "title": title or raw_title,
+                "artist": artist,
+                "attributes": ["YouTube"],
+                "lastPlayed": "",
+                "timesPlayed": 0,
+                "youtubeUrl": watch_url,
+                "videoId": video_id,
+                "youtubeTitle": raw_title,
+            }
+        )
+        if len(songs) >= MAX_SONGS:
+            break
+    if not songs:
+        raise SongListError("這個 YouTube 網址裡沒有可讀的影片。")
+    display = str(payload.get("title") or "").strip() or "YouTube 播放清單"
+    username = str(payload.get("id") or "youtube-playlist")
+    return {
+        "username": username,
+        "displayName": display,
+        "total": len(songs),
+        "songs": songs,
+        "sourceUrl": source_url,
+        "sourceKind": "youtube",
+        "sourceLabel": "YouTube",
+    }
+
+
+def fetch_youtube_playlist(raw_url):
+    ref = parse_youtube_playlist_ref(raw_url)
+    payload = ytdlp_dump_json(ref["url"])
+    return songs_from_youtube_payload(payload, ref["url"])
+
+
+def kkbox_tracks_from_widget(data):
+    songs = []
+    if isinstance(data.get("song_name"), str) and data.get("song_name").strip():
+        rows = [data]
+        display = data.get("song_name")
+    else:
+        rows = data.get("songlist") if isinstance(data.get("songlist"), list) else []
+        display = data.get("playlist_title") or data.get("album_name") or "KKBOX 歌單"
+    for index, item in enumerate(rows, start=1):
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("song_name") or "").strip()
+        artist = str(item.get("artist_name") or "").strip()
+        if not artist:
+            names = item.get("artist_names")
+            if isinstance(names, list):
+                artist = "、".join(str(name).strip() for name in names if str(name).strip())
+            elif isinstance(names, str):
+                artist = names.strip()
+        if not title:
+            continue
+        song_id = str(item.get("song_crypt_id") or item.get("song_id") or index)
+        songs.append(
+            {
+                "id": f"kkbox-{song_id}",
+                "title": title,
+                "artist": artist,
+                "attributes": ["KKBOX"],
+                "lastPlayed": "",
+                "timesPlayed": 0,
+            }
+        )
+        if len(songs) >= MAX_SONGS:
+            break
+    if not songs:
+        raise SongListError("這個 KKBOX 網址裡沒有可讀的歌曲。")
+    return str(display or "KKBOX 歌單").strip(), songs
+
+
+def fetch_kkbox_playlist(raw_url):
+    ref = parse_kkbox_ref(raw_url)
+    widget = f"https://widget.kkbox.com/v1/?id={urllib.parse.quote(ref['itemId'])}&type={urllib.parse.quote(ref['itemType'])}"
+    _final, body = http_get_text(widget)
+    match = re.search(r'data-state="([^"]+)"', body)
+    if not match:
+        raise SongListError("KKBOX 歌單讀不到內容。請確認是公開歌單／專輯網址。")
+    raw_state = html.unescape(match.group(1))
+    try:
+        state = json.loads(raw_state)
+    except json.JSONDecodeError as error:
+        raise SongListError("KKBOX 歌單資料無法讀取。") from error
+    data = state.get("feed", {}).get("data") if isinstance(state, dict) else None
+    if not isinstance(data, dict):
+        raise SongListError("找不到這個 KKBOX 歌單，請確認網址。")
+    display, songs = kkbox_tracks_from_widget(data)
+    return {
+        "username": ref["itemId"],
+        "displayName": display,
+        "total": len(songs),
+        "songs": songs,
+        "sourceUrl": ref["url"],
+        "sourceKind": "kkbox",
+        "sourceLabel": "KKBOX",
+    }
+
+
+def import_playlist(raw_url):
+    detected = detect_playlist(raw_url)
+    kind = detected["kind"]
+    if kind == "streamersonglist":
+        return fetch_songs(detected["username"])
+    if kind == "youtube":
+        return fetch_youtube_playlist(detected["url"])
+    if kind == "kkbox":
+        return fetch_kkbox_playlist(detected["url"])
+    raise SongListError("不支援這個歌單來源。")
 
 
 def find_ytdlp():
@@ -1082,12 +1379,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/songs":
             try:
                 incoming = read_json_body(self, 4000, "請貼上歌單網址。")
-                username = parse_username(incoming.get("url"))
-                result = fetch_songs(username)
+                result = import_playlist(incoming.get("url"))
             except SongListError as error:
                 self.respond_json(400, {"error": str(error)})
                 return
-            print(f"{username}: {len(result['songs'])} songs", flush=True)
+            print(f"{result.get('sourceKind')}: {result.get('displayName')}: {len(result['songs'])} songs", flush=True)
             self.respond_json(200, result)
             return
         if path == "/api/youtube-search":
