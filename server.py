@@ -26,7 +26,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.7.1"
 _httpd = None
 _bound_port = PORT
 _released = False
@@ -48,6 +48,17 @@ KKBOX_HOSTS = {
 }
 KKBOX_PATH_RE = re.compile(
     r"^/(?:[a-z]{2}/[a-z]{2}/)?(playlist|album|song)/([^/?#]+)/?$",
+    re.I,
+)
+SPOTIFY_HOSTS = {
+    "open.spotify.com",
+    "play.spotify.com",
+    "spotify.link",
+    "spotify.app.link",
+}
+SPOTIFY_URI_RE = re.compile(r"^spotify:(playlist|album|track):([A-Za-z0-9]{22})$", re.I)
+SPOTIFY_PATH_RE = re.compile(
+    r"^/(?:embed/)?(?:intl-[a-z]{2}/)?(playlist|album|track)/([A-Za-z0-9]{22})(?:/.*)?$",
     re.I,
 )
 PLAYLIST_YTDLP_TIMEOUT_SEC = 120
@@ -310,6 +321,9 @@ def normalize_url(raw_url):
     text = str(raw_url or "").strip()
     if not text:
         raise SongListError("請貼上歌單網址。")
+    uri = SPOTIFY_URI_RE.match(text)
+    if uri:
+        return f"https://open.spotify.com/{uri.group(1).lower()}/{uri.group(2)}"
     if "://" not in text:
         text = "https://" + text
     return text
@@ -400,6 +414,27 @@ def parse_kkbox_ref(raw_url):
     return {"kind": "kkbox", "itemType": item_type, "itemId": item_id, "url": text}
 
 
+def parse_spotify_ref(raw_url):
+    text = normalize_url(raw_url)
+    parsed = urllib.parse.urlparse(text)
+    host = (parsed.hostname or "").lower()
+    if host not in SPOTIFY_HOSTS:
+        return None
+    if host in {"spotify.link", "spotify.app.link"}:
+        final_url, _body = http_get_text(text)
+        parsed = urllib.parse.urlparse(final_url)
+        text = final_url
+    match = SPOTIFY_PATH_RE.match(parsed.path or "")
+    if not match:
+        raise SongListError("請貼 Spotify 歌單、專輯或歌曲網址。")
+    return {
+        "kind": "spotify",
+        "itemType": match.group(1).lower(),
+        "itemId": match.group(2),
+        "url": text,
+    }
+
+
 def detect_playlist(raw_url):
     text = normalize_url(raw_url)
     parsed = urllib.parse.urlparse(text)
@@ -412,8 +447,11 @@ def detect_playlist(raw_url):
     kkbox = parse_kkbox_ref(text)
     if kkbox:
         return kkbox
+    spotify = parse_spotify_ref(text)
+    if spotify:
+        return spotify
     raise SongListError(
-        "目前支援 StreamerSonglist、YouTube 播放清單／單支影片、KKBOX 歌單／專輯／歌曲。請貼其中一種網址。"
+        "目前支援 StreamerSonglist、YouTube 播放清單／單支影片、KKBOX、Spotify 歌單／專輯／歌曲。請貼其中一種網址。"
     )
 
 
@@ -575,6 +613,97 @@ def fetch_kkbox_playlist(raw_url):
     }
 
 
+def spotify_artist_text(item):
+    subtitle = str(item.get("subtitle") or "").replace("\xa0", " ").strip()
+    if subtitle:
+        return subtitle
+    artists = item.get("artists")
+    if isinstance(artists, list):
+        names = []
+        for artist in artists:
+            if isinstance(artist, dict) and artist.get("name"):
+                names.append(str(artist["name"]).strip())
+            elif isinstance(artist, str) and artist.strip():
+                names.append(artist.strip())
+        return "、".join(names)
+    return ""
+
+
+def songs_from_spotify_entity(entity, source_url, item_id):
+    if not isinstance(entity, dict):
+        raise SongListError("找不到這個 Spotify 歌單，請確認網址是公開的。")
+    rows = entity.get("trackList")
+    if not isinstance(rows, list) or not rows:
+        title = str(entity.get("title") or entity.get("name") or "").strip()
+        if title:
+            rows = [entity]
+        else:
+            rows = []
+    songs = []
+    for index, item in enumerate(rows, start=1):
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or item.get("name") or "").strip()
+        if not title:
+            continue
+        uri = str(item.get("uri") or "")
+        track_id = ""
+        match = re.search(r"spotify:track:([A-Za-z0-9]{22})", uri)
+        if match:
+            track_id = match.group(1)
+        elif re.fullmatch(r"[A-Za-z0-9]{22}", str(item.get("id") or "")):
+            track_id = str(item.get("id"))
+        else:
+            track_id = str(index)
+        songs.append(
+            {
+                "id": f"spotify-{track_id}",
+                "title": title,
+                "artist": spotify_artist_text(item),
+                "attributes": ["Spotify"],
+                "lastPlayed": "",
+                "timesPlayed": 0,
+            }
+        )
+        if len(songs) >= MAX_SONGS:
+            break
+    if not songs:
+        raise SongListError("這個 Spotify 網址裡沒有可讀的歌曲。請確認歌單是公開的。")
+    display = str(entity.get("title") or entity.get("name") or "Spotify 歌單").strip()
+    return {
+        "username": item_id,
+        "displayName": display,
+        "total": len(songs),
+        "songs": songs,
+        "sourceUrl": source_url,
+        "sourceKind": "spotify",
+        "sourceLabel": "Spotify",
+    }
+
+
+def fetch_spotify_playlist(raw_url):
+    ref = parse_spotify_ref(raw_url)
+    embed = f"https://open.spotify.com/embed/{ref['itemType']}/{ref['itemId']}"
+    _final, body = http_get_text(embed)
+    match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', body, re.S)
+    if not match:
+        raise SongListError("Spotify 歌單讀不到內容。請確認是公開歌單／專輯網址。")
+    try:
+        state = json.loads(match.group(1))
+    except json.JSONDecodeError as error:
+        raise SongListError("Spotify 歌單資料無法讀取。") from error
+    entity = (
+        state.get("props", {})
+        .get("pageProps", {})
+        .get("state", {})
+        .get("data", {})
+        .get("entity")
+        if isinstance(state, dict)
+        else None
+    )
+    return songs_from_spotify_entity(entity, ref["url"], ref["itemId"])
+
+
 def import_playlist(raw_url):
     detected = detect_playlist(raw_url)
     kind = detected["kind"]
@@ -584,6 +713,8 @@ def import_playlist(raw_url):
         return fetch_youtube_playlist(detected["url"])
     if kind == "kkbox":
         return fetch_kkbox_playlist(detected["url"])
+    if kind == "spotify":
+        return fetch_spotify_playlist(detected["url"])
     raise SongListError("不支援這個歌單來源。")
 
 
