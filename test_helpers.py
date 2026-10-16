@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.7.0")
+        self.assertEqual(server.APP_VERSION, "0.7.1")
 
 
 class FakeResponse:
@@ -518,6 +518,57 @@ class PlaylistImportTests(unittest.TestCase):
         with mock.patch.object(server, "http_get_text", return_value=("https://widget.kkbox.com/v1/", html_doc)):
             result = server.fetch_kkbox_playlist("https://www.kkbox.com/tw/tc/playlist/abc123")
         self.assertEqual(result["sourceKind"], "kkbox")
+        self.assertEqual(result["songs"][0]["title"], "雨愛")
+        self.assertEqual(result["songs"][0]["artist"], "楊丞琳")
+
+    def test_detect_spotify_playlist(self):
+        found = server.detect_playlist("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc")
+        self.assertEqual(found["kind"], "spotify")
+        self.assertEqual(found["itemType"], "playlist")
+        self.assertEqual(found["itemId"], "37i9dQZF1DXcBWIGoYBM5M")
+
+    def test_detect_spotify_uri(self):
+        found = server.detect_playlist("spotify:album:4aawyAB9vmqN3uQ7FjRGTy")
+        self.assertEqual(found["kind"], "spotify")
+        self.assertEqual(found["itemType"], "album")
+
+    def test_spotify_entity_tracks(self):
+        result = server.songs_from_spotify_entity(
+            {
+                "title": "Today’s Top Hits",
+                "trackList": [
+                    {
+                        "uri": "spotify:track:3XmwAZpIMNpTJy8faw3ajD",
+                        "title": "expectations",
+                        "subtitle": "Olivia Rodrigo,\xa0Chappell Roan",
+                    }
+                ],
+            },
+            "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+            "37i9dQZF1DXcBWIGoYBM5M",
+        )
+        self.assertEqual(result["sourceKind"], "spotify")
+        self.assertEqual(result["songs"][0]["title"], "expectations")
+        self.assertEqual(result["songs"][0]["artist"], "Olivia Rodrigo, Chappell Roan")
+
+    def test_spotify_embed_fetch(self):
+        payload = {
+            "props": {
+                "pageProps": {
+                    "state": {
+                        "data": {
+                            "entity": {
+                                "title": "測試",
+                                "trackList": [{"uri": "spotify:track:aaaaaaaaaaaaaaaaaaaaaa", "title": "雨愛", "subtitle": "楊丞琳"}],
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        html_doc = f'<script id="__NEXT_DATA__">{json.dumps(payload, ensure_ascii=False)}</script>'
+        with mock.patch.object(server, "http_get_text", return_value=("https://open.spotify.com/embed/playlist/x", html_doc)):
+            result = server.fetch_spotify_playlist("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
         self.assertEqual(result["songs"][0]["title"], "雨愛")
         self.assertEqual(result["songs"][0]["artist"], "楊丞琳")
 
