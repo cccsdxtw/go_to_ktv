@@ -26,7 +26,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 _httpd = None
 _bound_port = PORT
 _released = False
@@ -1742,9 +1742,76 @@ def bind_server(host, start_port, tries=20):
     raise OSError(f"找不到可用埠（從 {start_port} 試了 {tries} 個）。最後錯誤：{last_error}") from last_error
 
 
+def windows_app_browsers():
+    paths = [
+        os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    found = []
+    for path in paths:
+        if path and os.path.isfile(path) and path not in found:
+            found.append(path)
+    for name in ("chrome.exe", "msedge.exe"):
+        which = shutil.which(name)
+        if which and which not in found:
+            found.append(which)
+    return found
+
+
+def mac_app_browsers():
+    names = ("Google Chrome", "Microsoft Edge", "Chromium")
+    found = []
+    roots = (Path("/Applications"), Path.home() / "Applications")
+    for name in names:
+        if any((root / f"{name}.app").is_dir() for root in roots):
+            found.append(name)
+    return found
+
+
+def open_closeable_window(url):
+    """用 Chrome／Edge 的 --app 視窗打開，結束時才關得掉這個頁。"""
+    try:
+        if sys.platform.startswith("win"):
+            for exe in windows_app_browsers():
+                subprocess.Popen(
+                    [exe, f"--app={url}"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return True
+        elif sys.platform == "darwin":
+            for name in mac_app_browsers():
+                subprocess.Popen(
+                    ["open", "-na", name, "--args", f"--app={url}"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return True
+        else:
+            for name in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge"):
+                exe = shutil.which(name)
+                if not exe:
+                    continue
+                subprocess.Popen(
+                    [exe, f"--app={url}"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return True
+    except OSError:
+        return False
+    return False
+
+
 def open_browser(port):
     url = f"http://127.0.0.1:{port}"
     try:
+        if open_closeable_window(url):
+            return
         webbrowser.open(url)
     except Exception as error:
         print(f"無法自動打開瀏覽器：{error}", flush=True)
