@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.0")
+        self.assertEqual(server.APP_VERSION, "1.0.1")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -227,6 +227,29 @@ class ElitesandDialogTests(unittest.TestCase):
         self.assertIn("已下載完成", html)
         self.assertIn("關閉程式", html)
         self.assertIn('id="app-dialog"', html)
+        self.assertIn("window.close()", html)
+        self.assertIn("function closeThisTab()", html)
+
+
+class CloseableWindowTests(unittest.TestCase):
+    def test_windows_uses_app_flag(self):
+        calls = []
+
+        def fake_popen(args, **_kwargs):
+            calls.append(args)
+            return mock.Mock()
+
+        with mock.patch.object(server.sys, "platform", "win32"), mock.patch.object(
+            server, "windows_app_browsers", return_value=["C:\\chrome.exe"]
+        ), mock.patch.object(server.subprocess, "Popen", side_effect=fake_popen):
+            self.assertTrue(server.open_closeable_window("http://127.0.0.1:8765"))
+        self.assertEqual(calls, [["C:\\chrome.exe", "--app=http://127.0.0.1:8765"]])
+
+    def test_falls_back_when_no_app_browser(self):
+        with mock.patch.object(server.sys, "platform", "win32"), mock.patch.object(
+            server, "windows_app_browsers", return_value=[]
+        ):
+            self.assertFalse(server.open_closeable_window("http://127.0.0.1:8765"))
 
 
 class FakeResponse:
