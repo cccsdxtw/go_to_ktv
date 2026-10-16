@@ -249,6 +249,7 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn('id="youtube-search"', html)
         self.assertIn("去聽", html)
         self.assertIn("yt-pick", html)
+        self.assertIn("yt-choice", html)
         self.assertIn("applyYoutubeCandidate", html)
         self.assertIn('id="youtube-stop"', html)
         self.assertIn('id="send-elitesand"', html)

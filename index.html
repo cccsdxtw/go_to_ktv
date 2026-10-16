@@ -274,33 +274,44 @@
   }
   .yt-pick {
     display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 240px;
+  }
+  .yt-choice {
+    display: flex;
     gap: 8px;
     align-items: center;
-    min-width: 220px;
-  }
-  .yt-pick select {
-    flex: 1 1 auto;
-    min-width: 10em;
-    max-width: 24em;
-    background: #151821;
-    color: var(--text);
-    border: 1px solid var(--line);
+    margin: 0;
+    padding: 3px 6px;
     border-radius: 8px;
-    padding: 6px 8px;
-    font: inherit;
-    font-size: 12px;
   }
-  .yt-pick select:hover,
-  .yt-pick select:focus {
-    border-color: #5a6278;
-    outline: none;
+  .yt-choice:hover { background: #262b38; }
+  .yt-choice label {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    flex: 1 1 auto;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .yt-choice input {
+    flex: 0 0 auto;
+    margin: 3px 0 0;
+    accent-color: var(--accent);
+  }
+  .yt-choice .yt-name {
+    flex: 1 1 auto;
+    font-size: 12px;
+    line-height: 1.4;
+    min-width: 0;
   }
   .yt-pick a {
     flex: 0 0 auto;
     color: #8eb6ff;
     text-decoration: none;
     white-space: nowrap;
-    font-size: 13px;
+    font-size: 12px;
   }
   .yt-pick a:hover { text-decoration: underline; }
   tr.fail-row td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
@@ -1075,22 +1086,32 @@ function youtubeCell(song) {
   if (candidates.length) {
     const wrap = document.createElement("div");
     wrap.className = "yt-pick";
-    const select = document.createElement("select");
-    select.setAttribute("aria-label", "選擇 YouTube 搜尋結果");
-    candidates.forEach((item, index) => {
-      const option = document.createElement("option");
-      option.value = String(index);
-      const label = item.youtubeTitle || item.videoId || `結果 ${index + 1}`;
-      option.textContent = `${index + 1}. ${label}`;
-      select.appendChild(option);
-    });
+    const group = `yt-pick-${song.id || current.songs.indexOf(song)}`;
     const pick = Math.min(Math.max(Number(song.youtubePick) || 0, 0), candidates.length - 1);
-    select.value = String(pick);
-    select.addEventListener("change", () => {
-      applyYoutubeCandidate(song, Number(select.value), false);
-      render();
+    candidates.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "yt-choice";
+      const label = document.createElement("label");
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = group;
+      radio.value = String(index);
+      radio.checked = index === pick;
+      radio.setAttribute("aria-label", `選用搜尋結果 ${index + 1}`);
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        applyYoutubeCandidate(song, index, false);
+        render();
+      });
+      const name = document.createElement("span");
+      name.className = "yt-name";
+      name.textContent = `${index + 1}. ${item.youtubeTitle || item.videoId || "未命名"}`;
+      label.append(radio, name);
+      const listen = youtubeListenLink(item.url, item.youtubeTitle);
+      listen.addEventListener("click", (event) => event.stopPropagation());
+      row.append(label, listen);
+      wrap.appendChild(row);
     });
-    wrap.append(select, youtubeListenLink(song.youtubeUrl, song.youtubeTitle));
     td.appendChild(wrap);
     return td;
   }
