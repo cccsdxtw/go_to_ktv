@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.7.2")
+        self.assertEqual(server.APP_VERSION, "0.7.3")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -218,6 +218,15 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn('id="send-elitesand"', html)
         self.assertIn('id="elitesand-pin"', html)
         self.assertIn('id="elitesand-stop"', html)
+
+
+class ElitesandDialogTests(unittest.TestCase):
+    def test_prompt_copy(self):
+        html = Path("index.html").read_text(encoding="utf-8")
+        self.assertIn("請開啟Elitesand", html)
+        self.assertIn("已下載完成", html)
+        self.assertIn("關閉程式", html)
+        self.assertIn('id="app-dialog"', html)
 
 
 class FakeResponse:
