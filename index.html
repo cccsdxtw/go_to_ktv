@@ -1426,16 +1426,16 @@ document.addEventListener("keydown", (event) => {
 });
 
 function closeThisTab() {
-  try { window.open("", "_self"); } catch (_) { /* ignore */ }
-  window.close();
+  document.body.innerHTML = [
+    "<main style=\"max-width:640px;margin:48px auto;padding:0 16px;font-family:inherit\">",
+    "<h1>已結束</h1>",
+    "<p>http://127.0.0.1:8765 已讓出。黑色視窗也會一起關掉。這個分頁即將關閉。</p>",
+    "</main>"
+  ].join("");
   setTimeout(() => {
-    document.body.innerHTML = [
-      "<main style=\"max-width:640px;margin:48px auto;padding:0 16px;font-family:inherit\">",
-      "<h1>已結束</h1>",
-      "<p>http://127.0.0.1:8765 已讓出。黑色視窗也會一起關掉。這個分頁若沒自己關，請手動關掉。下次再雙擊「開始」。</p>",
-      "</main>"
-    ].join("");
-  }, 250);
+    try { window.open("", "_self"); } catch (_) { /* ignore */ }
+    window.close();
+  }, 1800);
 }
 
 async function closeThisApp() {

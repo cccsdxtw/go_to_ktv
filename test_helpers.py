@@ -229,6 +229,9 @@ class ElitesandDialogTests(unittest.TestCase):
         self.assertIn('id="app-dialog"', html)
         self.assertIn("window.close()", html)
         self.assertIn("function closeThisTab()", html)
+        close_fn = html.split("function closeThisTab()", 1)[1].split("async function closeThisApp()", 1)[0]
+        self.assertLess(close_fn.index("已結束"), close_fn.index("window.close()"))
+        self.assertIn("這個分頁即將關閉", close_fn)
 
 
 class CloseableWindowTests(unittest.TestCase):
