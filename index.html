@@ -371,8 +371,8 @@
   </div>
 </div>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.6.7</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。先搜 YouTube 伴奏，確認後按「送到 Elitesand 下載」。失敗可改歌名／歌手（在原字上改）再重試。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v0.7.0</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube 播放清單／影片或 KKBOX 歌單。YouTube 來源已有網址可直接送到 Elitesand；其他來源先搜伴奏再送。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -380,10 +380,10 @@
   <div class="sources">
     <section class="source-card">
       <h2>從網址抓歌</h2>
-      <p>貼上公開歌單網址，例如 https://streamersonglist.com/t/名稱/songs</p>
+      <p>可貼 StreamerSonglist、YouTube 播放清單／單支影片，或 KKBOX 歌單／專輯。</p>
       <form id="fetch-form">
         <label class="sr-only" for="url">歌單網址</label>
-        <input id="url" type="url" name="url" required placeholder="https://streamersonglist.com/t/名稱/songs" autocomplete="off">
+        <input id="url" type="url" name="url" required placeholder="StreamerSonglist、YouTube 播放清單或 KKBOX 歌單網址" autocomplete="off">
         <button class="primary" id="fetch" type="submit">抓取歌單</button>
       </form>
     </section>
@@ -448,10 +448,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>先開著 Elitesand Pro，搜完 YouTube、確認網址後按「送到 Elitesand 下載」（按下去會立刻變成「正在交給 Elitesand」，一首一首會比較久，屬正常）。會下載進媒體庫，並掛上<strong>目前播放清單</strong>（取代「音檔遺失」那一列），不必再一首一首點。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。若一直連不上，先關掉 VPN／虛擬區網（工作列右下角小箭頭裡的圖示 → 中斷連線）。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>YouTube 播放清單已帶網址，可直接按「送到 Elitesand 下載」。StreamerSonglist／KKBOX／表格請先「搜尋 YouTube」伴奏再送。會下載進媒體庫並掛上<strong>目前播放清單</strong>。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源只讀 streamersonglist.com；送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v0.6.7。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v0.7.0。</footer>
 <script>
 const form = document.getElementById("fetch-form");
 const urlInput = document.getElementById("url");
@@ -569,10 +569,15 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(payload.error || "抓取失敗。");
     showList({
       ...payload,
-      sourceKind: "streamersonglist",
+      sourceKind: payload.sourceKind || "streamersonglist",
       exportBase: payload.username || "songs"
     });
-    setStatus(`已抓到 ${payload.songs.length} 首。`, false);
+    const ready = (payload.songs || []).filter((song) => song.youtubeUrl).length;
+    if (payload.sourceKind === "youtube" && ready) {
+      setStatus(`已抓到 ${payload.songs.length} 首 YouTube 影片，可直接送到 Elitesand。若要改伴奏再按「搜尋 YouTube」。`, false);
+    } else {
+      setStatus(`已抓到 ${payload.songs.length} 首。`, false);
+    }
   } catch (error) {
     setStatus(networkErrorMessage(error, "抓取歌單"), true);
   } finally {
@@ -735,10 +740,12 @@ function showList(payload) {
   filterYtFail.setAttribute("aria-pressed", "false");
   filterEsFail.setAttribute("aria-pressed", "false");
   document.getElementById("list-title").textContent = `${payload.displayName} 的歌單`;
-  if (payload.sourceKind === "streamersonglist" && payload.sourceUrl) {
-    document.getElementById("list-meta").innerHTML = `共 ${payload.songs.length} 首 · 來源 <a href="${payload.sourceUrl}" target="_blank" rel="noreferrer">StreamerSonglist</a>`;
+  const sourceLabel = payload.sourceLabel
+    || ({ streamersonglist: "StreamerSonglist", youtube: "YouTube", kkbox: "KKBOX", sheet: "CSV／試算表" }[payload.sourceKind] || "CSV／試算表");
+  if (payload.sourceUrl) {
+    document.getElementById("list-meta").innerHTML = `共 ${payload.songs.length} 首 · 來源 <a href="${payload.sourceUrl}" target="_blank" rel="noreferrer">${sourceLabel}</a>`;
   } else {
-    document.getElementById("list-meta").textContent = `共 ${payload.songs.length} 首 · 來源 CSV／試算表`;
+    document.getElementById("list-meta").textContent = `共 ${payload.songs.length} 首 · 來源 ${sourceLabel}`;
   }
   const names = [];
   for (const song of payload.songs) {
@@ -1111,8 +1118,8 @@ function elitesandFilename() {
 }
 
 function elitesandDocument(list) {
-  const fallbackSource = current.sourceKind === "sheet" ? "spreadsheet" : "streamersonglist";
-  const prefix = current.sourceKind === "sheet" ? "sheet" : "ssl";
+  const fallbackSource = current.sourceKind === "sheet" ? "spreadsheet" : (current.sourceKind || "streamersonglist");
+  const prefix = current.sourceKind === "sheet" ? "sheet" : (current.sourceKind === "youtube" ? "yt" : current.sourceKind === "kkbox" ? "kkbox" : "ssl");
   return {
     version: "5.0",
     timestamp: Date.now(),

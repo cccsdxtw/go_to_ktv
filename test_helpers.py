@@ -198,7 +198,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "0.6.7")
+        self.assertEqual(server.APP_VERSION, "0.7.0")
 
 
 class FakeResponse:
@@ -441,6 +441,85 @@ class PlaylistAttachTests(unittest.TestCase):
         self.assertEqual(calls[1][0], "call")
         self.assertEqual(calls[1][1], "playlist:add")
         self.assertEqual(calls[1][2][0]["filename"], "a.mp3")
+
+
+class PlaylistImportTests(unittest.TestCase):
+    def test_detect_ssl(self):
+        found = server.detect_playlist("https://streamersonglist.com/t/demo/songs")
+        self.assertEqual(found["kind"], "streamersonglist")
+        self.assertEqual(found["username"], "demo")
+
+    def test_detect_youtube_playlist(self):
+        found = server.detect_playlist("https://www.youtube.com/playlist?list=PLabcdefghijk")
+        self.assertEqual(found["kind"], "youtube")
+        self.assertEqual(found["listId"], "PLabcdefghijk")
+
+    def test_detect_youtube_watch_with_list(self):
+        found = server.detect_playlist("https://www.youtube.com/watch?v=lOL3CEton6E&list=PLabc")
+        self.assertEqual(found["listId"], "PLabc")
+
+    def test_detect_youtube_video(self):
+        found = server.detect_playlist("https://youtu.be/lOL3CEton6E")
+        self.assertEqual(found["videoId"], "lOL3CEton6E")
+
+    def test_detect_youtube_mix_uses_video(self):
+        found = server.detect_playlist("https://www.youtube.com/watch?v=lOL3CEton6E&list=RDlOL3CEton6E")
+        self.assertEqual(found["videoId"], "lOL3CEton6E")
+        self.assertNotIn("listId", found)
+
+    def test_detect_kkbox_playlist(self):
+        found = server.detect_playlist("https://www.kkbox.com/tw/tc/playlist/4nUZM-TY2aVxZ2xaA-")
+        self.assertEqual(found["kind"], "kkbox")
+        self.assertEqual(found["itemType"], "playlist")
+        self.assertEqual(found["itemId"], "4nUZM-TY2aVxZ2xaA-")
+
+    def test_detect_unknown(self):
+        with self.assertRaises(server.SongListError) as ctx:
+            server.detect_playlist("https://example.com/x")
+        self.assertIn("StreamerSonglist", str(ctx.exception))
+
+    def test_split_title_artist(self):
+        title, artist = server.split_title_artist("F.I.R - Lydia")
+        self.assertEqual(title, "Lydia")
+        self.assertEqual(artist, "F.I.R")
+
+    def test_youtube_payload_prefills_url(self):
+        result = server.songs_from_youtube_payload(
+            {
+                "title": "My list",
+                "id": "PLabc",
+                "entries": [{"id": "lOL3CEton6E", "title": "F.I.R - Lydia", "uploader": "x"}],
+            },
+            "https://www.youtube.com/playlist?list=PLabc",
+        )
+        self.assertEqual(result["sourceKind"], "youtube")
+        song = result["songs"][0]
+        self.assertEqual(song["youtubeUrl"], "https://www.youtube.com/watch?v=lOL3CEton6E")
+        self.assertEqual(song["title"], "Lydia")
+        self.assertEqual(song["artist"], "F.I.R")
+
+    def test_kkbox_widget_tracks(self):
+        display, songs = server.kkbox_tracks_from_widget(
+            {
+                "playlist_title": "測試",
+                "songlist": [{"song_crypt_id": "a", "song_name": "這個世界", "artist_name": "蔡藍欽"}],
+            }
+        )
+        self.assertEqual(display, "測試")
+        self.assertEqual(songs[0]["title"], "這個世界")
+        self.assertEqual(songs[0]["artist"], "蔡藍欽")
+
+    def test_kkbox_widget_fetch(self):
+        html_doc = (
+            '<div data-state="{&quot;feed&quot;:{&quot;data&quot;:{&quot;playlist_title&quot;:&quot;測試&quot;,'
+            '&quot;songlist&quot;:[{&quot;song_crypt_id&quot;:&quot;a&quot;,&quot;song_name&quot;:&quot;雨愛&quot;,'
+            '&quot;artist_name&quot;:&quot;楊丞琳&quot;}]}}}"></div>'
+        )
+        with mock.patch.object(server, "http_get_text", return_value=("https://widget.kkbox.com/v1/", html_doc)):
+            result = server.fetch_kkbox_playlist("https://www.kkbox.com/tw/tc/playlist/abc123")
+        self.assertEqual(result["sourceKind"], "kkbox")
+        self.assertEqual(result["songs"][0]["title"], "雨愛")
+        self.assertEqual(result["songs"][0]["artist"], "楊丞琳")
 
 
 class ShutdownTests(unittest.TestCase):
