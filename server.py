@@ -26,7 +26,7 @@ PORT = int(os.environ.get("GO_TO_KTV_PORT", "8765") or "8765")
 ROOT = Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 AUDIO_DIR = ROOT / "elitesand-audio"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 _httpd = None
 _bound_port = PORT
 _released = False
@@ -1258,14 +1258,19 @@ def elitesand_base_override():
     return raw or ""
 
 
-def elitesand_json(url, timeout=0.8):
-    request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "go-to-ktv"})
+def elitesand_json(url, timeout=0.8, pin=""):
+    headers = {"Accept": "application/json", "User-Agent": "go-to-ktv"}
+    if pin:
+        headers["X-Pin"] = str(pin).strip()
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8", errors="replace"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
         return None
-    return payload if isinstance(payload, dict) else None
+    if isinstance(payload, (dict, list)):
+        return payload
+    return None
 
 
 def is_elitesand_health(payload):
@@ -1483,6 +1488,115 @@ def elitesand_import_youtube(raw_url, pin="", title="", artist=""):
     }
 
 
+def normalize_song_key(title, artist=""):
+    title_text = re.sub(r"\s+", " ", str(title or "")).strip().lower()
+    artist_text = re.sub(r"\s+", " ", str(artist or "")).strip().lower()
+    return f"{title_text}|{artist_text}"
+
+
+def extract_track_list(payload):
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("songs", "tracks", "items", "library", "media", "data", "results"):
+        value = payload.get(key)
+        found = extract_track_list(value)
+        if found:
+            return found
+    if payload.get("title") or payload.get("filename") or payload.get("id") or payload.get("url"):
+        return [payload]
+    return []
+
+
+def track_video_id(track):
+    if not isinstance(track, dict):
+        return ""
+    raw_id = str(track.get("id") or track.get("videoId") or "").strip()
+    if re.fullmatch(r"[A-Za-z0-9_-]{6,18}", raw_id):
+        return raw_id
+    for raw in (track.get("url"), track.get("youtubeUrl"), track.get("sourceUrl")):
+        try:
+            video_id, _watch = parse_watch_url(raw)
+            return video_id
+        except SongListError:
+            continue
+    return ""
+
+
+def summarize_elitesand_track(track):
+    video_id = track_video_id(track)
+    title = str(track.get("title") or track.get("name") or "").strip()
+    artist = str(track.get("artist") or track.get("uploader") or "").strip()
+    return {
+        "id": str(track.get("id") or video_id or ""),
+        "videoId": video_id,
+        "url": str(track.get("url") or ""),
+        "title": title,
+        "artist": artist,
+        "filename": str(track.get("filename") or ""),
+        "key": normalize_song_key(title, artist),
+    }
+
+
+def elitesand_library_tracks(found, pin=""):
+    if not found:
+        return []
+    pin = str(pin or "").strip()
+    seen = []
+    used = set()
+    for path in (
+        "/api/library",
+        "/api/songs",
+        "/api/tracks",
+        "/api/media",
+        "/api/library/songs",
+        "/api/media/songs",
+    ):
+        payload = elitesand_json(f"{found['base']}{path}", timeout=1.5, pin=pin)
+        for track in extract_track_list(payload):
+            item = summarize_elitesand_track(track)
+            marker = item["videoId"] or item["key"] or item["filename"]
+            if not marker or marker in used:
+                continue
+            used.add(marker)
+            seen.append(item)
+        if seen:
+            return seen
+    try:
+        client = elitesand_controller_socket(found, pin)
+        for event in ("library:list", "library:get", "songs:list"):
+            try:
+                payload = client.call(event, timeout=4)
+            except Exception:
+                continue
+            for track in extract_track_list(payload):
+                item = summarize_elitesand_track(track)
+                marker = item["videoId"] or item["key"] or item["filename"]
+                if not marker or marker in used:
+                    continue
+                used.add(marker)
+                seen.append(item)
+            if seen:
+                return seen
+    except SongListError:
+        return seen
+    return seen
+
+
+def fetch_elitesand_library(pin=""):
+    found = find_elitesand()
+    if not found:
+        return {"ok": False, "tracks": []}
+    tracks = elitesand_library_tracks(found, pin)
+    return {
+        "ok": True,
+        "base": found["base"],
+        "count": len(tracks),
+        "tracks": tracks,
+    }
+
+
 def open_audio_folder():
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     folder = str(AUDIO_DIR)
@@ -1581,6 +1695,17 @@ class Handler(BaseHTTPRequestHandler):
             skipped = " skip" if result.get("skipped") else ""
             print(f"dl{skipped}: {result['videoId']} -> {result['filename']}", flush=True)
             self.respond_json(200, result)
+            return
+        if path == "/api/elitesand-library":
+            pin = ""
+            length = int(self.headers.get("Content-Length") or "0")
+            if length > 0:
+                try:
+                    incoming = read_json_body(self, 4000, "請提供 JSON。")
+                    pin = incoming.get("pin") or ""
+                except SongListError:
+                    pin = ""
+            self.respond_json(200, fetch_elitesand_library(pin))
             return
         if path == "/api/elitesand-import":
             try:

@@ -241,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.3")
+        self.assertEqual(server.APP_VERSION, "1.0.4")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -261,6 +261,7 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn("yt-pick", html)
         self.assertIn("yt-choice", html)
         self.assertIn("另外", html)
+        self.assertIn("is-collapsed", html)
         self.assertIn("applyYoutubeCandidate", html)
         self.assertIn('id="youtube-stop"', html)
         self.assertIn('id="send-elitesand"', html)
@@ -444,6 +445,35 @@ class ElitesandProxyTests(unittest.TestCase):
         self.assertTrue(result["playlistOk"])
         self.assertEqual(result["filename"], "old.mp3")
         attach.assert_called_once()
+
+    def test_library_index_from_api(self):
+        def fake_json(url, timeout=0, pin=""):
+            if str(url).endswith("/api/library"):
+                return {
+                    "tracks": [
+                        {
+                            "title": "打上花火",
+                            "artist": "DAOKO",
+                            "url": "https://youtu.be/lOL3CEton6E",
+                        }
+                    ]
+                }
+            return None
+
+        with mock.patch.object(
+            server, "find_elitesand", return_value={"ok": True, "base": "http://127.0.0.1:3000"}
+        ), mock.patch.object(server, "elitesand_json", side_effect=fake_json):
+            result = server.fetch_elitesand_library("1234")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["tracks"][0]["videoId"], "lOL3CEton6E")
+        self.assertEqual(result["tracks"][0]["key"], "打上花火|daoko")
+
+    def test_song_key_and_extract(self):
+        self.assertEqual(server.normalize_song_key(" 打上花火 ", " DAOKO "), "打上花火|daoko")
+        tracks = server.extract_track_list({"songs": [{"title": "雨愛", "artist": "楊丞琳", "id": "abc12345678"}]})
+        item = server.summarize_elitesand_track(tracks[0])
+        self.assertEqual(item["videoId"], "abc12345678")
 
     def test_import_pin_required(self):
         def fake_urlopen(request, timeout=0):
