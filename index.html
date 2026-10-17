@@ -314,9 +314,10 @@
     font-size: 12px;
   }
   .yt-pick a:hover { text-decoration: underline; }
+  .yt-pick.is-collapsed .yt-name { padding: 3px 0; }
   .yt-more {
     align-self: flex-start;
-    margin: 2px 0 0 22px;
+    margin: 2px 0 0;
     background: transparent;
     color: #8eb6ff;
     border: 0;
@@ -325,6 +326,7 @@
     font-size: 12px;
     cursor: pointer;
   }
+  .yt-pick:not(.is-collapsed) .yt-more { margin-left: 22px; }
   .yt-more:hover { text-decoration: underline; }
   tr.fail-row td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
   tr.flash { background: #3a2424; }
@@ -475,7 +477,7 @@
   </div>
 </div>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.3</span></h1>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.4</span></h1>
   <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。YouTube 來源已有網址可直接送到 Elitesand；其他來源先搜伴奏再送。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
@@ -567,7 +569,7 @@
     <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>YouTube 播放清單已帶網址，可直接按「送到 Elitesand 下載」。StreamerSonglist／KKBOX／Spotify／表格請先「搜尋 YouTube」伴奏再送。會下載進媒體庫並掛上<strong>目前播放清單</strong>。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.3。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.4。</footer>
 <div class="dialog-overlay" id="app-dialog" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
     <h2 id="app-dialog-title"></h2>
@@ -892,6 +894,7 @@ function showList(payload) {
   resultEl.classList.add("show");
   render();
   refreshElitesandStatus();
+  markExistingElitesandSongs();
 }
 
 function visibleSongs() {
@@ -906,6 +909,124 @@ function visibleSongs() {
     }
     return true;
   });
+}
+
+const ES_KNOWN_KEY = "go_to_ktv_elitesand_known_v1";
+let elitesandLibraryCache = { at: 0, index: null };
+
+function songKey(title, artist) {
+  return `${String(title || "").replace(/\s+/g, " ").trim().toLowerCase()}|${String(artist || "").replace(/\s+/g, " ").trim().toLowerCase()}`;
+}
+
+function loadKnownElitesand() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ES_KNOWN_KEY) || "[]");
+    return new Set(Array.isArray(raw) ? raw.map(String) : []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function saveKnownElitesand(keys) {
+  try {
+    localStorage.setItem(ES_KNOWN_KEY, JSON.stringify([...keys].slice(-8000)));
+  } catch (_) { /* ignore quota */ }
+}
+
+function rememberElitesandSong(song, extra) {
+  const keys = loadKnownElitesand();
+  if (song.videoId) keys.add(`id:${song.videoId}`);
+  const key = songKey(song.title, song.artist);
+  if (key !== "|") keys.add(`k:${key}`);
+  if (extra && extra.videoId) keys.add(`id:${extra.videoId}`);
+  if (extra && extra.key && extra.key !== "|") keys.add(`k:${extra.key}`);
+  saveKnownElitesand(keys);
+}
+
+function libraryIndexFromTracks(tracks) {
+  const byId = new Set();
+  const byKey = new Set();
+  const files = new Map();
+  for (const track of tracks || []) {
+    if (track.videoId) {
+      byId.add(track.videoId);
+      files.set(`id:${track.videoId}`, track.filename || "");
+    }
+    if (track.key && track.key !== "|") {
+      byKey.add(track.key);
+      files.set(`k:${track.key}`, track.filename || "");
+    }
+  }
+  return { byId, byKey, files };
+}
+
+function matchKnownElitesand(song, index) {
+  const known = loadKnownElitesand();
+  if (song.videoId && (index.byId.has(song.videoId) || known.has(`id:${song.videoId}`))) {
+    return index.files.get(`id:${song.videoId}`) || "已在 Elitesand";
+  }
+  const key = songKey(song.title, song.artist);
+  if (key !== "|" && (index.byKey.has(key) || known.has(`k:${key}`))) {
+    return index.files.get(`k:${key}`) || "已在 Elitesand";
+  }
+  return "";
+}
+
+function markAlreadyInElitesand(song, filename) {
+  song.elitesandOk = true;
+  song.playlistOk = true;
+  song.elitesandSkipped = true;
+  song.elitesandFile = filename || "已在 Elitesand";
+  song.audioError = "";
+}
+
+function applyKnownElitesand(songs, index) {
+  let skipped = 0;
+  for (const song of songs) {
+    if (song.elitesandOk && !song.elitesandSkipped) continue;
+    if (song.elitesandSkipped) continue;
+    const filename = matchKnownElitesand(song, index);
+    if (!filename) continue;
+    markAlreadyInElitesand(song, filename);
+    skipped += 1;
+  }
+  return skipped;
+}
+
+async function loadElitesandLibraryIndex(force) {
+  if (!force && elitesandLibraryCache.index && (Date.now() - elitesandLibraryCache.at) < 60000) {
+    return elitesandLibraryCache.index;
+  }
+  let tracks = [];
+  try {
+    const response = await fetch("/api/elitesand-library", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: elitesandPinInput.value.trim() })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (payload && Array.isArray(payload.tracks)) tracks = payload.tracks;
+  } catch (_) { /* Elitesand 沒開時略過 */ }
+  const index = libraryIndexFromTracks(tracks);
+  const known = loadKnownElitesand();
+  for (const track of tracks) {
+    if (track.videoId) known.add(`id:${track.videoId}`);
+    if (track.key && track.key !== "|") known.add(`k:${track.key}`);
+  }
+  saveKnownElitesand(known);
+  elitesandLibraryCache = { at: Date.now(), index };
+  return index;
+}
+
+async function markExistingElitesandSongs() {
+  if (!current) return 0;
+  const index = await loadElitesandLibraryIndex();
+  const skipped = applyKnownElitesand(current.songs, index);
+  if (skipped) {
+    setStatus(`其中 ${skipped} 首已在 Elitesand，這次會略過。`, false);
+    render();
+  }
+  return skipped;
 }
 
 function isYtFail(song) {
@@ -1042,6 +1163,12 @@ function audioCell(song) {
     td.textContent = song.audioFile;
     return td;
   }
+  if (song.elitesandSkipped) {
+    td.textContent = song.elitesandFile && song.elitesandFile !== "已在 Elitesand"
+      ? `${song.elitesandFile} · 已在 Elitesand`
+      : "已在 Elitesand，略過";
+    return td;
+  }
   if (song.playlistOk) {
     td.textContent = song.elitesandFile ? `${song.elitesandFile} · 已進清單` : "已進播放清單";
     return td;
@@ -1140,7 +1267,15 @@ function youtubeCell(song) {
       });
       wrap.appendChild(hide);
     } else {
-      wrap.appendChild(youtubeChoiceRow(song, candidates[pick], pick, pick, group));
+      wrap.classList.add("is-collapsed");
+      const picked = candidates[pick];
+      const row = document.createElement("div");
+      row.className = "yt-choice";
+      const name = document.createElement("span");
+      name.className = "yt-name";
+      name.textContent = picked.youtubeTitle || picked.videoId || "已找到";
+      row.append(name, youtubeListenLink(picked.url, picked.youtubeTitle));
+      wrap.appendChild(row);
       if (extra > 0) {
         const more = document.createElement("button");
         more.type = "button";
@@ -1430,10 +1565,11 @@ async function searchYoutubeTargets(targets) {
   }
 }
 
-youtubeSearchButton.addEventListener("click", () => {
+youtubeSearchButton.addEventListener("click", async () => {
   if (!current || youtubeSearching) return;
+  await markExistingElitesandSongs();
   const failed = visibleSongs().filter(isYtFail);
-  const missing = visibleSongs().filter((song) => !song.youtubeUrl);
+  const missing = visibleSongs().filter((song) => !song.youtubeUrl && !song.elitesandSkipped);
   if (failFilter === "yt" || (failed.length && failed.length === missing.length)) {
     if (!failed.length) {
       setStatus("目前沒有 YouTube 搜尋失敗的歌。", false);
@@ -1443,7 +1579,11 @@ youtubeSearchButton.addEventListener("click", () => {
     return;
   }
   if (!missing.length) {
-    setStatus("目前畫面上的歌都已經有 YouTube 網址。若要只重試失敗，請按失敗清單上的「重試這 N 首」。", false);
+    if (visibleSongs().some((song) => song.elitesandSkipped && !song.youtubeUrl)) {
+      setStatus("剩下的歌已在 Elitesand，不必再搜。", false);
+    } else {
+      setStatus("目前畫面上的歌都已經有 YouTube 網址。若要只重試失敗，請按失敗清單上的「重試這 N 首」。", false);
+    }
     return;
   }
   searchYoutubeTargets(missing);
@@ -1664,6 +1804,7 @@ async function sendOneElitesand(song) {
   song.elitesandFile = filename;
   song.elitesandSkipped = Boolean(payload.skipped);
   song.audioError = "";
+  rememberElitesandSong(song);
 }
 
 async function sendElitesandTargets(targets) {
@@ -1731,11 +1872,12 @@ async function sendElitesandTargets(targets) {
   }
 }
 
-sendElitesandButton.addEventListener("click", () => {
+sendElitesandButton.addEventListener("click", async () => {
   if (!current || elitesandSending) return;
   reclaimFakeSends();
+  await markExistingElitesandSongs();
   const failed = failFilter === "es" ? sendFailedSongs() : visibleSongs().filter(isSendFail);
-  const pending = visibleSongs().filter((song) => song.youtubeUrl && !song.playlistOk);
+  const pending = visibleSongs().filter((song) => song.youtubeUrl && !song.playlistOk && !song.elitesandSkipped);
   if (failFilter === "es" || (failed.length && failed.length === pending.length)) {
     if (!failed.length) {
       setStatus("目前沒有送出失敗的歌。", false);
