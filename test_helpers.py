@@ -241,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.4")
+        self.assertEqual(server.APP_VERSION, "1.0.5")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -265,8 +265,61 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn("applyYoutubeCandidate", html)
         self.assertIn('id="youtube-stop"', html)
         self.assertIn('id="send-elitesand"', html)
+        self.assertIn('id="one-click"', html)
+        self.assertIn('id="one-click-fetch"', html)
+        self.assertIn('id="one-click-sheet"', html)
+        self.assertIn('id="pipeline-stop"', html)
+        self.assertIn("一鍵開始", html)
         self.assertIn('id="elitesand-pin"', html)
         self.assertIn('id="elitesand-stop"', html)
+        self.assertIn("暫停搜尋", html)
+        self.assertIn("暫停送出", html)
+        self.assertIn("暫停另存", html)
+        self.assertNotIn("hidden>暫停", html)
+        self.assertNotIn('hidden>停止', html)
+
+
+class OneClickPipelineTests(unittest.TestCase):
+    def test_elitesand_before_youtube_then_send(self):
+        html = Path("index.html").read_text(encoding="utf-8")
+        fn = html.split("async function runOneClickPipeline()", 1)[1].split("oneClickButton.addEventListener", 1)[0]
+        self.assertLess(fn.index("markExistingElitesandSongs(true)"), fn.index("searchYoutubeTargets(missing"))
+        self.assertLess(fn.index("searchYoutubeTargets(missing"), fn.index("sendElitesandTargets(pending"))
+        self.assertIn("fromPipeline: true", fn)
+        self.assertIn("pipelineWasStopped()", fn)
+        self.assertIn("promptDownloadDone", fn)
+        self.assertIn("已暫停", fn)
+
+    def test_stop_clears_and_aborts(self):
+        html = Path("index.html").read_text(encoding="utf-8")
+        self.assertIn("function clearStopFlags()", html)
+        self.assertIn("pipelineAbort.abort()", html)
+        search = html.split("async function searchYoutubeTargets", 1)[1].split("youtubeSearchButton.addEventListener", 1)[0]
+        send = html.split("async function sendElitesandTargets", 1)[1].split("sendElitesandButton.addEventListener", 1)[0]
+        self.assertIn("if (!fromPipeline) clearStopFlags()", search)
+        self.assertIn("if (!fromPipeline) clearStopFlags()", send)
+        self.assertIn('id="pipeline-stop"', html)
+        self.assertIn("暫停", html)
+
+
+class StickyFlowChartTests(unittest.TestCase):
+    def test_sticky_steps_and_status(self):
+        html = Path("index.html").read_text(encoding="utf-8")
+        self.assertIn('class="stick-top"', html)
+        self.assertIn('id="flow-chart"', html)
+        self.assertLess(html.index("截取歌曲"), html.index("確定Elitesand歌單"))
+        self.assertLess(html.index("確定Elitesand歌單"), html.index("YT搜尋"))
+        self.assertLess(html.index("YT搜尋"), html.index("匯入Elitesand下載"))
+        self.assertLess(html.index("匯入Elitesand下載"), html.index(">完成<"))
+        status_at = html.index('id="status"')
+        chart_at = html.index('id="flow-chart"')
+        self.assertLess(chart_at, status_at)
+        self.assertLess(status_at, html.index('id="result"'))
+        self.assertIn("function setFlowStage(", html)
+        self.assertIn('class="source-card zone-fetch"', html)
+        self.assertIn("zone-yt", html)
+        self.assertIn("zone-import", html)
+        self.assertIn("zone-check", html)
 
 
 class ElitesandDialogTests(unittest.TestCase):
