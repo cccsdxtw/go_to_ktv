@@ -241,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.6")
+        self.assertEqual(server.APP_VERSION, "1.0.7")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -263,19 +263,33 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn("另外", html)
         self.assertIn("is-collapsed", html)
         self.assertIn("applyYoutubeCandidate", html)
-        self.assertIn('id="youtube-stop"', html)
+        self.assertNotIn('id="youtube-stop"', html)
+        self.assertNotIn('id="elitesand-stop"', html)
+        self.assertNotIn('id="audio-stop"', html)
         self.assertIn('id="send-elitesand"', html)
-        self.assertIn('id="one-click"', html)
-        self.assertIn('id="one-click-fetch"', html)
-        self.assertIn('id="one-click-sheet"', html)
+        self.assertIn('id="one-click-serial"', html)
+        self.assertIn('id="one-click-parallel"', html)
+        self.assertIn('id="one-click-fetch-serial"', html)
+        self.assertIn('id="one-click-fetch-parallel"', html)
+        self.assertIn('id="one-click-sheet-serial"', html)
+        self.assertIn('id="one-click-sheet-parallel"', html)
+        self.assertIn("一鍵開始(順序)", html)
+        self.assertIn("一鍵開始(並行)", html)
+        self.assertIn('id="send-concurrency"', html)
+        self.assertIn('<option value="1" selected>1</option>', html)
+        self.assertIn("同時下載預設 1，每次打開都是 1", html)
+        self.assertIn("Elitesand 沒保證能同時收多首", html)
+        self.assertIn('sendConcurrencySelect.value = "1"', html)
+        self.assertNotIn("go_to_ktv_send_conc", html)
         self.assertIn('id="check-elitesand"', html)
         self.assertIn('id="pipeline-stop"', html)
         self.assertIn("一鍵開始", html)
         self.assertIn('id="elitesand-pin"', html)
-        self.assertIn('id="elitesand-stop"', html)
-        self.assertIn("暫停搜尋", html)
-        self.assertIn("暫停送出", html)
-        self.assertIn("暫停另存", html)
+        self.assertNotIn("暫停搜尋", html)
+        self.assertNotIn("暫停送出", html)
+        self.assertNotIn("暫停另存", html)
+        self.assertLess(html.index(">其他<"), html.index('id="copy-youtube"'))
+        self.assertLess(html.index('id="youtube-search"'), html.index('id="copy-youtube"'))
         self.assertNotIn("hidden>暫停", html)
         self.assertNotIn('hidden>停止', html)
 
@@ -283,13 +297,31 @@ class ActionGroupLayoutTests(unittest.TestCase):
 class OneClickPipelineTests(unittest.TestCase):
     def test_elitesand_before_youtube_then_send(self):
         html = Path("index.html").read_text(encoding="utf-8")
-        fn = html.split("async function runOneClickPipeline()", 1)[1].split("oneClickButton.addEventListener", 1)[0]
-        self.assertLess(fn.index("markExistingElitesandSongs(true)"), fn.index("searchYoutubeTargets(missing"))
-        self.assertLess(fn.index("searchYoutubeTargets(missing"), fn.index("sendElitesandTargets(pending"))
-        self.assertIn("fromPipeline: true", fn)
+        fn = html.split("async function runOneClickPipeline", 1)[1].split("oneClickSerialButton.addEventListener", 1)[0]
+        self.assertLess(fn.index("markExistingElitesandSongs(true)"), fn.index("overlapSearchAndSend"))
+        self.assertIn("runSerialSearchThenSend", fn)
+        self.assertIn('mode === "parallel"', fn)
         self.assertIn("pipelineWasStopped()", fn)
-        self.assertIn("promptDownloadDone", fn)
         self.assertIn("已暫停", fn)
+        serial = html.split("async function runSerialSearchThenSend", 1)[1].split("async function finishOneClickResult", 1)[0]
+        self.assertLess(serial.index("searchYoutubeTargets"), serial.index("sendElitesandTargets"))
+        overlap = html.split("function createOverlapEngine()", 1)[1].split("async function overlapSearchAndSend", 1)[0]
+        self.assertIn("enqueueSend", overlap)
+        self.assertIn("searchOneYoutube", overlap)
+        self.assertIn("sendOneElitesand", overlap)
+        self.assertIn("finishCrawl", overlap)
+        self.assertIn("createSendPool", overlap)
+        self.assertIn("/api/songs-stream", html)
+        self.assertIn("async function runOneClickFromUrl", html)
+        from_url = html.split("async function runOneClickFromUrl", 1)[1].split("async function startOneClickFromUrl", 1)[0]
+        self.assertLess(from_url.index("loadElitesandLibraryIndex(true)"), from_url.index("loadPlaylistFromUrl"))
+        self.assertLess(from_url.index("loadPlaylistFromUrl"), from_url.index("streamPlaylistFromUrl"))
+        self.assertLess(from_url.index("streamPlaylistFromUrl"), from_url.index("engine.addSongs"))
+        self.assertIn("runSerialSearchThenSend", from_url)
+        pool = html.split("function createSendPool()", 1)[1].split("function createOverlapEngine()", 1)[0]
+        self.assertIn("sendConcurrency()", pool)
+        send = html.split("async function sendElitesandTargets", 1)[1].split("sendElitesandButton.addEventListener", 1)[0]
+        self.assertIn("createSendPool()", send)
 
     def test_stop_clears_and_aborts(self):
         html = Path("index.html").read_text(encoding="utf-8")
@@ -303,6 +335,53 @@ class OneClickPipelineTests(unittest.TestCase):
         self.assertIn("暫停", html)
 
 
+class PlaylistStreamTests(unittest.TestCase):
+    def test_ssl_emits_first_page_before_second_fetch(self):
+        pages = [
+            {
+                "./routes/streamer/_streamer": {
+                    "streamer": {"platforms": {"twitch": {"displayName": "Ada"}}}
+                },
+                "./routes/streamer/songs": {
+                    "songs": [{"id": 1, "title": "A", "artist": "X"}],
+                    "token": "next",
+                    "total": 2,
+                },
+            },
+            {
+                "./routes/streamer/_streamer": {},
+                "./routes/streamer/songs": {
+                    "songs": [{"id": 2, "title": "B", "artist": "Y"}],
+                    "token": "",
+                    "total": 2,
+                },
+            },
+        ]
+        calls = []
+
+        def fake_payload(url):
+            calls.append(url)
+            return pages[len(calls) - 1]
+
+        with mock.patch.object(server, "fetch_payload", side_effect=fake_payload):
+            events = list(server.iter_streamersonglist("ada"))
+        self.assertEqual(events[0]["type"], "meta")
+        self.assertEqual(events[1]["type"], "songs")
+        self.assertEqual(events[1]["songs"][0]["title"], "A")
+        self.assertEqual(events[2]["type"], "songs")
+        self.assertEqual(events[2]["songs"][0]["title"], "B")
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertEqual(len(calls), 2)
+        assembled = server.playlist_from_events(events)
+        self.assertEqual(len(assembled["songs"]), 2)
+        self.assertEqual(assembled["displayName"], "Ada")
+
+    def test_stream_route_exists(self):
+        text = Path("server.py").read_text(encoding="utf-8")
+        self.assertIn('path == "/api/songs-stream"', text)
+        self.assertIn("def iter_import_playlist", text)
+
+
 class StickyFlowChartTests(unittest.TestCase):
     def test_sticky_steps_and_status(self):
         html = Path("index.html").read_text(encoding="utf-8")
@@ -314,8 +393,11 @@ class StickyFlowChartTests(unittest.TestCase):
         self.assertLess(html.index("匯入Elitesand下載"), html.index("flow-name\">完成"))
         status_at = html.index('id="status"')
         chart_at = html.index('id="flow-chart"')
+        self.assertLess(chart_at, html.index('id="pipeline-stop"'))
+        self.assertLess(html.index('id="pipeline-stop"'), status_at)
         self.assertLess(chart_at, status_at)
         self.assertLess(status_at, html.index('id="result"'))
+        self.assertIn("function setFlowStages(", html)
         self.assertIn("function setFlowStage(", html)
         self.assertIn("function setFlowHint(", html)
         self.assertIn('data-flow-hint="check"', html)
