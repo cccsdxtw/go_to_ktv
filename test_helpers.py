@@ -272,6 +272,11 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn("一鍵開始", html)
         self.assertIn('id="elitesand-pin"', html)
         self.assertIn('id="elitesand-stop"', html)
+        self.assertIn("暫停搜尋", html)
+        self.assertIn("暫停送出", html)
+        self.assertIn("暫停另存", html)
+        self.assertNotIn("hidden>暫停", html)
+        self.assertNotIn('hidden>停止', html)
 
 
 class OneClickPipelineTests(unittest.TestCase):
@@ -295,6 +300,26 @@ class OneClickPipelineTests(unittest.TestCase):
         self.assertIn("if (!fromPipeline) clearStopFlags()", send)
         self.assertIn('id="pipeline-stop"', html)
         self.assertIn("暫停", html)
+
+
+class StickyFlowChartTests(unittest.TestCase):
+    def test_sticky_steps_and_status(self):
+        html = Path("index.html").read_text(encoding="utf-8")
+        self.assertIn('class="stick-top"', html)
+        self.assertIn('id="flow-chart"', html)
+        self.assertLess(html.index("截取歌曲"), html.index("確定Elitesand歌單"))
+        self.assertLess(html.index("確定Elitesand歌單"), html.index("YT搜尋"))
+        self.assertLess(html.index("YT搜尋"), html.index("匯入Elitesand下載"))
+        self.assertLess(html.index("匯入Elitesand下載"), html.index(">完成<"))
+        status_at = html.index('id="status"')
+        chart_at = html.index('id="flow-chart"')
+        self.assertLess(chart_at, status_at)
+        self.assertLess(status_at, html.index('id="result"'))
+        self.assertIn("function setFlowStage(", html)
+        self.assertIn('class="source-card zone-fetch"', html)
+        self.assertIn("zone-yt", html)
+        self.assertIn("zone-import", html)
+        self.assertIn("zone-check", html)
 
 
 class ElitesandDialogTests(unittest.TestCase):
