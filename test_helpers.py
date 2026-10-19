@@ -241,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.5")
+        self.assertEqual(server.APP_VERSION, "1.0.6")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -268,6 +268,7 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn('id="one-click"', html)
         self.assertIn('id="one-click-fetch"', html)
         self.assertIn('id="one-click-sheet"', html)
+        self.assertIn('id="check-elitesand"', html)
         self.assertIn('id="pipeline-stop"', html)
         self.assertIn("一鍵開始", html)
         self.assertIn('id="elitesand-pin"', html)
@@ -310,12 +311,17 @@ class StickyFlowChartTests(unittest.TestCase):
         self.assertLess(html.index("截取歌曲"), html.index("確定Elitesand歌單"))
         self.assertLess(html.index("確定Elitesand歌單"), html.index("YT搜尋"))
         self.assertLess(html.index("YT搜尋"), html.index("匯入Elitesand下載"))
-        self.assertLess(html.index("匯入Elitesand下載"), html.index(">完成<"))
+        self.assertLess(html.index("匯入Elitesand下載"), html.index("flow-name\">完成"))
         status_at = html.index('id="status"')
         chart_at = html.index('id="flow-chart"')
         self.assertLess(chart_at, status_at)
         self.assertLess(status_at, html.index('id="result"'))
         self.assertIn("function setFlowStage(", html)
+        self.assertIn("function setFlowHint(", html)
+        self.assertIn('data-flow-hint="check"', html)
+        self.assertIn("尚未對", html)
+        self.assertIn("正在對 Elitesand", html)
+        self.assertIn('id="check-elitesand"', html)
         self.assertIn('class="source-card zone-fetch"', html)
         self.assertIn("zone-yt", html)
         self.assertIn("zone-import", html)
