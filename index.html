@@ -226,8 +226,12 @@
     list-style: none;
   }
   .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
     margin: 0;
-    border-radius: 999px;
+    border-radius: 12px;
     padding: 6px 12px;
     font-size: 12px;
     font-weight: 650;
@@ -235,6 +239,14 @@
     border: 1px solid var(--line);
     background: var(--panel);
     color: var(--muted);
+  }
+  .flow-name { display: block; }
+  .flow-hint {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.88;
+    max-width: 16em;
   }
   .flow-step[data-step="fetch"] { background: var(--flow-fetch-bg); color: var(--flow-fetch-text); border-color: var(--flow-fetch-line); }
   .flow-step[data-step="check"] { background: var(--flow-check-bg); color: var(--flow-check-text); border-color: var(--flow-check-line); }
@@ -617,22 +629,37 @@
 <div class="flow-bar" id="flow-bar">
   <div class="flow-inner">
     <ol class="flow-chart" id="flow-chart" aria-label="流程">
-      <li class="flow-step is-current" data-step="fetch">截取歌曲</li>
+      <li class="flow-step is-current" data-step="fetch">
+        <span class="flow-name">截取歌曲</span>
+        <small class="flow-hint" data-flow-hint="fetch">尚未抓</small>
+      </li>
       <li class="flow-arrow" aria-hidden="true">→</li>
-      <li class="flow-step" data-step="check">確定Elitesand歌單</li>
+      <li class="flow-step" data-step="check">
+        <span class="flow-name">確定Elitesand歌單</span>
+        <small class="flow-hint" data-flow-hint="check">尚未對</small>
+      </li>
       <li class="flow-arrow" aria-hidden="true">→</li>
-      <li class="flow-step" data-step="youtube">YT搜尋</li>
+      <li class="flow-step" data-step="youtube">
+        <span class="flow-name">YT搜尋</span>
+        <small class="flow-hint" data-flow-hint="youtube">尚未搜</small>
+      </li>
       <li class="flow-arrow" aria-hidden="true">→</li>
-      <li class="flow-step" data-step="import">匯入Elitesand下載</li>
+      <li class="flow-step" data-step="import">
+        <span class="flow-name">匯入Elitesand下載</span>
+        <small class="flow-hint" data-flow-hint="import">尚未送</small>
+      </li>
       <li class="flow-arrow" aria-hidden="true">→</li>
-      <li class="flow-step" data-step="done">完成</li>
+      <li class="flow-step" data-step="done">
+        <span class="flow-name">完成</span>
+        <small class="flow-hint" data-flow-hint="done">還沒</small>
+      </li>
     </ol>
     <p class="status" id="status" role="status"></p>
   </div>
 </div>
 </div>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.5</span></h1>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.6</span></h1>
   <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。貼上後按「一鍵開始」：先對 Elitesand 已有的歌，再搜 YouTube，再送出。過程中可隨時暫停。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
@@ -674,6 +701,7 @@
         <div class="action-row zone-check">
           <span class="row-label">流程</span>
           <button class="primary" id="one-click" type="button">一鍵開始</button>
+          <button class="ghost" id="check-elitesand" type="button">確定Elitesand歌單</button>
           <button class="ghost pause" id="pipeline-stop" type="button" disabled>暫停</button>
         </div>
         <div class="action-row">
@@ -726,10 +754,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>貼上歌單後按「一鍵開始」：先對 Elitesand 已有的歌（略過）、再搜 YouTube、再送出。過程中可按「暫停」。也可以分開按「搜尋 YouTube」或「送到 Elitesand 下載」。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>貼上歌單後按「一鍵開始」，或自己按「確定Elitesand歌單」看略過了幾首。上方流程圖每一步會寫進行中／結果。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.5。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.6。</footer>
 <div class="dialog-overlay" id="app-dialog" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
     <h2 id="app-dialog-title"></h2>
@@ -755,6 +783,7 @@ const elitesandPinInput = document.getElementById("elitesand-pin");
 const oneClickButton = document.getElementById("one-click");
 const oneClickFetchButton = document.getElementById("one-click-fetch");
 const oneClickSheetButton = document.getElementById("one-click-sheet");
+const checkElitesandButton = document.getElementById("check-elitesand");
 const pipelineStopButton = document.getElementById("pipeline-stop");
 const elitesandStatusEl = document.getElementById("elitesand-status");
 const statusEl = document.getElementById("status");
@@ -804,6 +833,11 @@ function setFlowStage(stage) {
   });
 }
 
+function setFlowHint(step, text) {
+  const el = document.querySelector(`[data-flow-hint="${step}"]`);
+  if (el) el.textContent = text || "";
+}
+
 function refreshFlowStage() {
   if (pipelineRunning || pipelineControlsBusy) return;
   if (youtubeSearching) {
@@ -821,8 +855,10 @@ function refreshFlowStage() {
   const songs = current.songs || [];
   const needYt = songs.some((song) => !song.youtubeUrl && !song.elitesandSkipped);
   const needSend = songs.some((song) => song.youtubeUrl && !song.playlistOk && !song.elitesandSkipped);
-  if (!needYt && !needSend) setFlowStage("done");
-  else if (needYt) setFlowStage("youtube");
+  if (!needYt && !needSend) {
+    setFlowStage("done");
+    setFlowHint("done", "好了");
+  } else if (needYt) setFlowStage("youtube");
   else setFlowStage("import");
 }
 
@@ -908,10 +944,12 @@ async function loadPlaylistFromUrl(url) {
     exportBase: payload.username || "songs"
   });
   const ready = (payload.songs || []).filter((song) => song.youtubeUrl).length;
+  const n = payload.songs.length;
+  setFlowHint("fetch", `已抓 ${n} 首`);
   if (payload.sourceKind === "youtube" && ready) {
-    setStatus(`已抓到 ${payload.songs.length} 首 YouTube 影片。已在 Elitesand 的會略過，其餘可直接送。`, false);
+    setStatus(`已抓到 ${n} 首 YouTube 影片。已在 Elitesand 的會略過，其餘可直接送。`, false);
   } else {
-    setStatus(`已抓到 ${payload.songs.length} 首。`, false);
+    setStatus(`已抓到 ${n} 首。`, false);
   }
   setFlowStage("check");
   return payload;
@@ -922,6 +960,7 @@ form.addEventListener("submit", async (event) => {
   if (pipelineRunning || youtubeSearching || elitesandSending) return;
   const url = urlInput.value.trim();
   setFlowStage("fetch");
+  setFlowHint("fetch", "正在抓…");
   setButtonBusy(fetchButton, true, "正在抓取…");
   setStatus("正在抓取歌單…", false);
   try {
@@ -972,6 +1011,7 @@ function applySheetText(raw, baseName) {
     sourceKind: "sheet",
     exportBase: baseName
   });
+  setFlowHint("fetch", `已抓 ${songs.length} 首`);
   setStatus(`已從表格讀入 ${songs.length} 首。`, false);
   setFlowStage("check");
 }
@@ -1245,18 +1285,34 @@ async function loadElitesandLibraryIndex(force) {
     if (track.key && track.key !== "|") known.add(`k:${track.key}`);
   }
   saveKnownElitesand(known);
-  elitesandLibraryCache = { at: Date.now(), index };
+  elitesandLibraryCache = { at: Date.now(), index, trackCount: tracks.length };
   return index;
+}
+
+function checkHintText(skipped, remain, trackCount) {
+  if (skipped && !remain) return `全部已在庫裡（${skipped} 首）`;
+  if (skipped) return `略過 ${skipped} 首，還有 ${remain} 首`;
+  if (trackCount) return `沒對到已有的歌（庫 ${trackCount} 筆）`;
+  return "沒讀到 Elitesand 清單";
 }
 
 async function markExistingElitesandSongs(force) {
   if (!current) return 0;
+  setFlowStage("check");
+  setFlowHint("check", "正在對 Elitesand…");
+  setStatus("正在對 Elitesand 歌單…", false);
   const index = await loadElitesandLibraryIndex(force);
-  const skipped = applyKnownElitesand(current.songs, index);
-  if (skipped) {
-    setStatus(`其中 ${skipped} 首已在 Elitesand，這次會略過。`, false);
-    render();
+  if (pipelineWasStopped()) {
+    setFlowHint("check", "已暫停");
+    return applyKnownElitesand(current.songs, index);
   }
+  const skipped = applyKnownElitesand(current.songs, index);
+  const remain = current.songs.filter((song) => !song.elitesandSkipped).length;
+  const trackCount = elitesandLibraryCache.trackCount || 0;
+  const hint = checkHintText(skipped, remain, trackCount);
+  setFlowHint("check", hint);
+  setStatus(`已對 Elitesand。${hint}。`, false);
+  render();
   return skipped;
 }
 
@@ -1778,6 +1834,7 @@ async function searchYoutubeTargets(targets, options) {
   youtubeSearching = true;
   if (!fromPipeline) clearStopFlags();
   setFlowStage("youtube");
+  setFlowHint("youtube", `正在搜 0/${targets.length}`);
   setButtonBusy(youtubeSearchButton, true, "正在搜尋 YouTube…");
   syncStopButtons();
   let ok = 0;
@@ -1787,6 +1844,7 @@ async function searchYoutubeTargets(targets, options) {
       if (pipelineWasStopped()) break;
       const song = targets[i];
       if (song.elitesandSkipped) continue;
+      setFlowHint("youtube", `正在搜 ${i + 1}/${targets.length}`);
       setButtonBusy(youtubeSearchButton, true, `正在搜尋 ${i + 1}/${targets.length}`);
       setStatus(`正在搜尋 YouTube ${i + 1}/${targets.length}：${song.title}`, false);
       try {
@@ -1801,6 +1859,9 @@ async function searchYoutubeTargets(targets, options) {
       if (last || i % 4 === 3) render();
     }
     const stopped = pipelineWasStopped();
+    setFlowHint("youtube", stopped
+      ? `已暫停，成功 ${ok}，失敗 ${failed}`
+      : `成功 ${ok}，失敗 ${failed}`);
     if (!fromPipeline) {
       const prefix = stopped
         ? `已停止搜尋。成功 ${ok}，失敗 ${failed}。`
@@ -2093,6 +2154,7 @@ async function sendElitesandTargets(targets, options) {
   elitesandSending = true;
   if (!fromPipeline) clearStopFlags();
   setFlowStage("import");
+  setFlowHint("import", `正在送 0/${targets.length}`);
   setButtonBusy(sendElitesandButton, true, "正在交給 Elitesand…");
   syncStopButtons();
   setStatus("已點到，正在連 Elitesand（下載一首會比較久）…", false);
@@ -2116,6 +2178,7 @@ async function sendElitesandTargets(targets, options) {
       if (pipelineWasStopped()) break;
       const song = targets[i];
       if (song.elitesandSkipped || song.playlistOk) continue;
+      setFlowHint("import", `正在送 ${i + 1}/${targets.length}`);
       setButtonBusy(sendElitesandButton, true, `正在交給 Elitesand ${i + 1}/${targets.length}`);
       setStatus(`正在交給 Elitesand ${i + 1}/${targets.length}：${song.title}（請等，沒當機）`, false);
       try {
@@ -2138,6 +2201,9 @@ async function sendElitesandTargets(targets, options) {
       render();
     }
     const stopped = pipelineWasStopped();
+    setFlowHint("import", pinStop
+      ? "需要 PIN"
+      : (stopped ? `已暫停，新下載 ${ok}，失敗 ${failed}` : `新下載 ${ok}，失敗 ${failed}`));
     if (pinStop) {
       setStatus("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。失敗的歌在表格上方，可按「重試這 N 首」。", true);
     } else if (!fromPipeline) {
@@ -2197,6 +2263,7 @@ function setPipelineBusy(busy, label) {
   setButtonBusy(oneClickButton, busy, label);
   setButtonBusy(oneClickFetchButton, busy, label);
   setButtonBusy(oneClickSheetButton, busy, label);
+  setButtonBusy(checkElitesandButton, busy, label);
   fetchButton.disabled = busy;
   sheetParse.disabled = busy;
   youtubeSearchButton.disabled = busy;
@@ -2262,6 +2329,7 @@ async function runOneClickPipeline() {
         return;
       }
       setFlowStage("done");
+      setFlowHint("done", sendResult.failed ? `完成，失敗 ${sendResult.failed} 首` : "好了");
       finishWithFails(`一鍵開始完成。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
       await promptDownloadDone();
       return;
@@ -2272,6 +2340,7 @@ async function runOneClickPipeline() {
       return;
     }
     setFlowStage("done");
+    setFlowHint("done", skipped ? "沒有要新下載的歌" : "好了");
     finishWithFails(`一鍵開始完成。略過已有 ${skipped} 首，沒有需要新下載的歌。`, sendFailedSongs());
     await promptDownloadDone();
   } finally {
@@ -2286,6 +2355,39 @@ oneClickButton.addEventListener("click", () => {
   runOneClickPipeline();
 });
 
+checkElitesandButton.addEventListener("click", async () => {
+  if (!current || pipelineRunning || youtubeSearching || elitesandSending) return;
+  clearStopFlags();
+  setPipelineBusy(true, "正在對歌單…");
+  try {
+    const online = await refreshElitesandStatus();
+    if (pipelineWasStopped()) {
+      setFlowHint("check", "已暫停");
+      setStatus("已暫停。", false);
+      return;
+    }
+    if (!online) {
+      setFlowStage("check");
+      setFlowHint("check", "請先開 Elitesand");
+      setStatus("請先打開 Elitesand Pro，再對歌單。", true);
+      await promptOpenElitesand();
+      return;
+    }
+    await markExistingElitesandSongs(true);
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      setFlowHint("check", "已暫停");
+      setStatus("已暫停。", false);
+      return;
+    }
+    setFlowHint("check", "對歌單失敗");
+    setStatus(error.message || "對 Elitesand 歌單失敗。", true);
+  } finally {
+    setPipelineBusy(false);
+    refreshFlowStage();
+  }
+});
+
 oneClickFetchButton.addEventListener("click", async () => {
   if (pipelineRunning || youtubeSearching || elitesandSending) return;
   const url = urlInput.value.trim();
@@ -2297,6 +2399,7 @@ oneClickFetchButton.addEventListener("click", async () => {
   let started = false;
   clearStopFlags();
   setFlowStage("fetch");
+  setFlowHint("fetch", "正在抓…");
   setPipelineBusy(true, "正在抓取…");
   setStatus("正在抓取歌單…", false);
   try {
