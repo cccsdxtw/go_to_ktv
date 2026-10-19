@@ -241,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.4")
+        self.assertEqual(server.APP_VERSION, "1.0.5")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -265,8 +265,36 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn("applyYoutubeCandidate", html)
         self.assertIn('id="youtube-stop"', html)
         self.assertIn('id="send-elitesand"', html)
+        self.assertIn('id="one-click"', html)
+        self.assertIn('id="one-click-fetch"', html)
+        self.assertIn('id="one-click-sheet"', html)
+        self.assertIn('id="pipeline-stop"', html)
+        self.assertIn("一鍵開始", html)
         self.assertIn('id="elitesand-pin"', html)
         self.assertIn('id="elitesand-stop"', html)
+
+
+class OneClickPipelineTests(unittest.TestCase):
+    def test_elitesand_before_youtube_then_send(self):
+        html = Path("index.html").read_text(encoding="utf-8")
+        fn = html.split("async function runOneClickPipeline()", 1)[1].split("oneClickButton.addEventListener", 1)[0]
+        self.assertLess(fn.index("markExistingElitesandSongs(true)"), fn.index("searchYoutubeTargets(missing"))
+        self.assertLess(fn.index("searchYoutubeTargets(missing"), fn.index("sendElitesandTargets(pending"))
+        self.assertIn("fromPipeline: true", fn)
+        self.assertIn("pipelineWasStopped()", fn)
+        self.assertIn("promptDownloadDone", fn)
+        self.assertIn("已暫停", fn)
+
+    def test_stop_clears_and_aborts(self):
+        html = Path("index.html").read_text(encoding="utf-8")
+        self.assertIn("function clearStopFlags()", html)
+        self.assertIn("pipelineAbort.abort()", html)
+        search = html.split("async function searchYoutubeTargets", 1)[1].split("youtubeSearchButton.addEventListener", 1)[0]
+        send = html.split("async function sendElitesandTargets", 1)[1].split("sendElitesandButton.addEventListener", 1)[0]
+        self.assertIn("if (!fromPipeline) clearStopFlags()", search)
+        self.assertIn("if (!fromPipeline) clearStopFlags()", send)
+        self.assertIn('id="pipeline-stop"', html)
+        self.assertIn("暫停", html)
 
 
 class ElitesandDialogTests(unittest.TestCase):
