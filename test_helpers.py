@@ -241,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.6")
+        self.assertEqual(server.APP_VERSION, "1.0.7")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -263,7 +263,9 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn("另外", html)
         self.assertIn("is-collapsed", html)
         self.assertIn("applyYoutubeCandidate", html)
-        self.assertIn('id="youtube-stop"', html)
+        self.assertNotIn('id="youtube-stop"', html)
+        self.assertNotIn('id="elitesand-stop"', html)
+        self.assertNotIn('id="audio-stop"', html)
         self.assertIn('id="send-elitesand"', html)
         self.assertIn('id="one-click"', html)
         self.assertIn('id="one-click-fetch"', html)
@@ -272,10 +274,11 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn('id="pipeline-stop"', html)
         self.assertIn("一鍵開始", html)
         self.assertIn('id="elitesand-pin"', html)
-        self.assertIn('id="elitesand-stop"', html)
-        self.assertIn("暫停搜尋", html)
-        self.assertIn("暫停送出", html)
-        self.assertIn("暫停另存", html)
+        self.assertNotIn("暫停搜尋", html)
+        self.assertNotIn("暫停送出", html)
+        self.assertNotIn("暫停另存", html)
+        self.assertLess(html.index(">其他<"), html.index('id="copy-youtube"'))
+        self.assertLess(html.index('id="youtube-search"'), html.index('id="copy-youtube"'))
         self.assertNotIn("hidden>暫停", html)
         self.assertNotIn('hidden>停止', html)
 
@@ -284,12 +287,15 @@ class OneClickPipelineTests(unittest.TestCase):
     def test_elitesand_before_youtube_then_send(self):
         html = Path("index.html").read_text(encoding="utf-8")
         fn = html.split("async function runOneClickPipeline()", 1)[1].split("oneClickButton.addEventListener", 1)[0]
-        self.assertLess(fn.index("markExistingElitesandSongs(true)"), fn.index("searchYoutubeTargets(missing"))
-        self.assertLess(fn.index("searchYoutubeTargets(missing"), fn.index("sendElitesandTargets(pending"))
-        self.assertIn("fromPipeline: true", fn)
+        self.assertLess(fn.index("markExistingElitesandSongs(true)"), fn.index("overlapSearchAndSend"))
         self.assertIn("pipelineWasStopped()", fn)
         self.assertIn("promptDownloadDone", fn)
         self.assertIn("已暫停", fn)
+        overlap = html.split("async function overlapSearchAndSend", 1)[1].split("function setPipelineBusy", 1)[0]
+        self.assertIn("enqueueSend", overlap)
+        self.assertIn("searchOneYoutube", overlap)
+        self.assertIn("sendOneElitesand", overlap)
+        self.assertIn('setFlowStages(youtubeSearching ? ["youtube", "import"] : ["import"])', overlap)
 
     def test_stop_clears_and_aborts(self):
         html = Path("index.html").read_text(encoding="utf-8")
@@ -314,8 +320,11 @@ class StickyFlowChartTests(unittest.TestCase):
         self.assertLess(html.index("匯入Elitesand下載"), html.index("flow-name\">完成"))
         status_at = html.index('id="status"')
         chart_at = html.index('id="flow-chart"')
+        self.assertLess(chart_at, html.index('id="pipeline-stop"'))
+        self.assertLess(html.index('id="pipeline-stop"'), status_at)
         self.assertLess(chart_at, status_at)
         self.assertLess(status_at, html.index('id="result"'))
+        self.assertIn("function setFlowStages(", html)
         self.assertIn("function setFlowStage(", html)
         self.assertIn("function setFlowHint(", html)
         self.assertIn('data-flow-hint="check"', html)
