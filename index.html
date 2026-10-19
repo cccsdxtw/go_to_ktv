@@ -243,6 +243,14 @@
     background: #343b4a;
     box-shadow: none;
   }
+  .flow-pause.is-resume {
+    background: var(--accent);
+    color: #1a1008;
+    border-color: #ff9d5a;
+  }
+  .flow-pause.is-resume:hover:not(:disabled) {
+    background: #ff9d5a;
+  }
   .flow-step {
     display: flex;
     flex-direction: column;
@@ -724,8 +732,8 @@
 </div>
 </div>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.7</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。流程框可選同時下載幾首，每次打開都是 1。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.8</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。流程框可選同時下載幾首，每次打開都是 1。暫停後同一顆會變成「繼續」，接著做還沒做完的。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -829,10 +837,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載預設 1（每次打開都是 1）；調高是冒險，Elitesand 沒保證吃得下。暫停在最上方。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載預設 1（每次打開都是 1）；調高是冒險，Elitesand 沒保證吃得下。暫停在最上方，按「繼續」接著做。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.7。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.8。</footer>
 <div class="dialog-overlay" id="app-dialog" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
     <h2 id="app-dialog-title"></h2>
@@ -887,6 +895,8 @@ let elitesandSending = false;
 let elitesandStopRequested = false;
 let pipelineRunning = false;
 let pipelineStopRequested = false;
+let pipelinePaused = false;
+let pauseWaiters = [];
 let pipelineAbort = new AbortController();
 let failFilter = "";
 let highlightIndex = -1;
@@ -1038,6 +1048,7 @@ async function readNdjson(response, onEvent) {
   const decoder = new TextDecoder();
   let buffer = "";
   while (true) {
+    await waitIfPaused();
     if (pipelineWasStopped()) {
       try { await reader.cancel(); } catch (_) { /* ignore */ }
       break;
@@ -1490,6 +1501,7 @@ async function markExistingElitesandSongs(force) {
   setFlowHint("check", "正在對 Elitesand…");
   setStatus("正在對 Elitesand 歌單…", false);
   const index = await loadElitesandLibraryIndex(force);
+  await waitIfPaused();
   if (pipelineWasStopped()) {
     setFlowHint("check", "已暫停");
     return applyKnownElitesand(current.songs, index);
@@ -2029,6 +2041,7 @@ async function searchYoutubeTargets(targets, options) {
   let failed = 0;
   try {
     for (let i = 0; i < targets.length; i++) {
+      await waitIfPaused();
       if (pipelineWasStopped()) break;
       const song = targets[i];
       if (song.elitesandSkipped) continue;
@@ -2097,12 +2110,48 @@ function resetPipelineAbort() {
   pipelineAbort = new AbortController();
 }
 
+function flushPauseWaiters() {
+  const waiters = pauseWaiters;
+  pauseWaiters = [];
+  for (const fn of waiters) fn();
+}
+
+function updatePauseButton() {
+  if (!pipelineStopButton) return;
+  pipelineStopButton.textContent = pipelinePaused ? "繼續" : "暫停";
+  pipelineStopButton.classList.toggle("is-resume", pipelinePaused);
+}
+
+function waitIfPaused() {
+  if (pipelineWasStopped() || !pipelinePaused) return Promise.resolve();
+  setStatus("已暫停。正在進行的那一首會做完，按「繼續」接著做。", false);
+  return new Promise((resolve) => { pauseWaiters.push(resolve); });
+}
+
 function clearStopFlags() {
   pipelineStopRequested = false;
   youtubeStopRequested = false;
   elitesandStopRequested = false;
   audioStopRequested = false;
+  pipelinePaused = false;
+  pauseWaiters = [];
+  updatePauseButton();
   resetPipelineAbort();
+}
+
+function requestPause() {
+  if (pipelinePaused || pipelineWasStopped() || !anyWorkRunning()) return;
+  pipelinePaused = true;
+  updatePauseButton();
+  setStatus("已暫停。正在進行的那一首會做完，按「繼續」接著做。", false);
+}
+
+function requestResume() {
+  if (!pipelinePaused) return;
+  pipelinePaused = false;
+  updatePauseButton();
+  setStatus("接著做…", false);
+  flushPauseWaiters();
 }
 
 function requestStop(message) {
@@ -2110,8 +2159,11 @@ function requestStop(message) {
   youtubeStopRequested = true;
   elitesandStopRequested = true;
   audioStopRequested = true;
+  pipelinePaused = false;
+  updatePauseButton();
   try { pipelineAbort.abort(); } catch (_) { /* ignore */ }
-  setStatus(message || "正在暫停…", false);
+  flushPauseWaiters();
+  setStatus(message || "正在停止…", false);
 }
 
 copyYoutubeButton.addEventListener("click", async () => {
@@ -2171,6 +2223,7 @@ downloadAudioButton.addEventListener("click", async () => {
   let failed = 0;
   try {
     for (let i = 0; i < targets.length; i++) {
+      await waitIfPaused();
       if (audioStopRequested || pipelineWasStopped()) break;
       const song = targets[i];
       setButtonBusy(downloadAudioButton, true, `正在另存 ${i + 1}/${targets.length}`);
@@ -2359,6 +2412,7 @@ async function sendElitesandTargets(targets, options) {
     const concNote = pool.conc > 1 ? `，同時 ${pool.conc} 首` : "";
     for (const song of targets) {
       pool.enqueue(async () => {
+        await waitIfPaused();
         if (pinStop || pipelineWasStopped()) return;
         if (song.elitesandSkipped || song.playlistOk) return;
         sent += 1;
@@ -2378,8 +2432,7 @@ async function sendElitesandTargets(targets, options) {
           failed += 1;
           if (/需要 PIN/.test(song.audioError)) {
             pinStop = true;
-            elitesandStopRequested = true;
-            pipelineStopRequested = true;
+            requestStop("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。");
           }
         }
         render();
@@ -2457,6 +2510,7 @@ function createSendPool() {
       const slot = next % workers.length;
       next += 1;
       workers[slot] = workers[slot].then(async () => {
+        await waitIfPaused();
         if (pipelineWasStopped()) return;
         inFlight += 1;
         elitesandSending = true;
@@ -2519,6 +2573,7 @@ function createOverlapEngine() {
 
   const enqueueSend = (song) => {
     sendPool.enqueue(async () => {
+      await waitIfPaused();
       if (result.pinStop || !result.online || pipelineWasStopped()) return;
       if (!song.youtubeUrl || song.elitesandSkipped || song.playlistOk) return;
       if (!sendStarted) {
@@ -2558,8 +2613,7 @@ function createOverlapEngine() {
         result.failed += 1;
         if (/需要 PIN/.test(song.audioError)) {
           result.pinStop = true;
-          elitesandStopRequested = true;
-          pipelineStopRequested = true;
+          requestStop("Elitesand 需要 PIN。請在欄位填入 PIN 後再送。");
         }
       }
       render();
@@ -2573,6 +2627,8 @@ function createOverlapEngine() {
     syncStopButtons();
     try {
       while (!pipelineWasStopped()) {
+        await waitIfPaused();
+        if (pipelineWasStopped()) break;
         if (!searchQueue.length) {
           if (crawlDone) break;
           youtubeSearching = false;
@@ -2664,6 +2720,11 @@ function setPipelineBusy(busy, label) {
   youtubeSearchButton.disabled = busy;
   sendElitesandButton.disabled = busy;
   if (sendConcurrencySelect) sendConcurrencySelect.disabled = busy;
+  if (!busy) {
+    pipelinePaused = false;
+    flushPauseWaiters();
+    updatePauseButton();
+  }
   syncStopButtons();
 }
 
@@ -2680,11 +2741,16 @@ async function runSerialSearchThenSend(work) {
     const searchResult = await searchYoutubeTargets(needSearch, { fromPipeline: true });
     searchOk = searchResult.ok;
     searchFailed = searchResult.failed;
+    await waitIfPaused();
     if (searchResult.stopped || pipelineWasStopped()) {
       return { ok: 0, skipped: 0, failed: 0, searchOk, searchFailed, stopped: true, pinStop: false, online: true };
     }
   } else {
     setFlowHint("youtube", "已有網址");
+  }
+  await waitIfPaused();
+  if (pipelineWasStopped()) {
+    return { ok: 0, skipped: 0, failed: 0, searchOk, searchFailed, stopped: true, pinStop: false, online: true };
   }
   const toSend = work.filter((song) => song.youtubeUrl && !song.elitesandSkipped && !song.playlistOk);
   if (!toSend.length) {
@@ -2724,8 +2790,9 @@ async function runOneClickPipeline(mode) {
   try {
     setStatus("先對 Elitesand 已有的歌…", false);
     const online = await refreshElitesandStatus();
+    await waitIfPaused();
     if (pipelineWasStopped()) {
-      setStatus("已暫停。", false);
+      setStatus("已停止。", false);
       return;
     }
     if (!online) {
@@ -2734,8 +2801,9 @@ async function runOneClickPipeline(mode) {
       return;
     }
     const skipped = await markExistingElitesandSongs(true);
+    await waitIfPaused();
     if (pipelineWasStopped()) {
-      setStatus("已暫停。", false);
+      setStatus("已停止。", false);
       return;
     }
     const work = visibleSongs().filter((song) => !song.elitesandSkipped && !song.playlistOk);
@@ -2772,9 +2840,10 @@ checkElitesandButton.addEventListener("click", async () => {
   setPipelineBusy(true, "正在對歌單…");
   try {
     const online = await refreshElitesandStatus();
+    await waitIfPaused();
     if (pipelineWasStopped()) {
-      setFlowHint("check", "已暫停");
-      setStatus("已暫停。", false);
+      setFlowHint("check", "已停止");
+      setStatus("已停止。", false);
       return;
     }
     if (!online) {
@@ -2810,8 +2879,9 @@ async function runOneClickFromUrl(url, mode) {
   try {
     setStatus("先對 Elitesand 已有的歌…", false);
     const online = await refreshElitesandStatus();
+    await waitIfPaused();
     if (pipelineWasStopped()) {
-      setStatus("已暫停。", false);
+      setStatus("已停止。", false);
       return;
     }
     if (!online) {
@@ -2820,8 +2890,9 @@ async function runOneClickFromUrl(url, mode) {
       return;
     }
     await loadElitesandLibraryIndex(true);
+    await waitIfPaused();
     if (pipelineWasStopped()) {
-      setStatus("已暫停。", false);
+      setStatus("已停止。", false);
       return;
     }
     setFlowHint("check", "已連上庫，開始抓歌單");
@@ -2830,13 +2901,15 @@ async function runOneClickFromUrl(url, mode) {
     if (!parallel) {
       setStatus("正在抓歌單（抓完再搜、再送）…", false);
       await loadPlaylistFromUrl(url);
+      await waitIfPaused();
       if (pipelineWasStopped()) {
-        setStatus("已暫停。", false);
+        setStatus("已停止。", false);
         return;
       }
       const skipped = await markExistingElitesandSongs(true);
+      await waitIfPaused();
       if (pipelineWasStopped()) {
-        setStatus("已暫停。", false);
+        setStatus("已停止。", false);
         return;
       }
       const work = visibleSongs().filter((song) => !song.elitesandSkipped && !song.playlistOk);
@@ -2928,7 +3001,8 @@ oneClickSheetSerialButton.addEventListener("click", () => startOneClickFromSheet
 oneClickSheetParallelButton.addEventListener("click", () => startOneClickFromSheet("parallel"));
 
 pipelineStopButton.addEventListener("click", () => {
-  requestStop("正在暫停流程…");
+  if (pipelinePaused) requestResume();
+  else requestPause();
 });
 
 openAudioFolderButton.addEventListener("click", async () => {

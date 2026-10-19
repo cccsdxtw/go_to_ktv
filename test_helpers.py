@@ -241,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.7")
+        self.assertEqual(server.APP_VERSION, "1.0.8")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -302,7 +302,7 @@ class OneClickPipelineTests(unittest.TestCase):
         self.assertIn("runSerialSearchThenSend", fn)
         self.assertIn('mode === "parallel"', fn)
         self.assertIn("pipelineWasStopped()", fn)
-        self.assertIn("已暫停", fn)
+        self.assertIn("waitIfPaused", fn)
         serial = html.split("async function runSerialSearchThenSend", 1)[1].split("async function finishOneClickResult", 1)[0]
         self.assertLess(serial.index("searchYoutubeTargets"), serial.index("sendElitesandTargets"))
         overlap = html.split("function createOverlapEngine()", 1)[1].split("async function overlapSearchAndSend", 1)[0]
@@ -326,13 +326,22 @@ class OneClickPipelineTests(unittest.TestCase):
     def test_stop_clears_and_aborts(self):
         html = Path("index.html").read_text(encoding="utf-8")
         self.assertIn("function clearStopFlags()", html)
-        self.assertIn("pipelineAbort.abort()", html)
+        self.assertIn("function requestPause()", html)
+        self.assertIn("function requestResume()", html)
+        self.assertIn("function waitIfPaused()", html)
+        self.assertIn('pipelinePaused ? "繼續" : "暫停"', html)
+        pause = html.split("function requestPause()", 1)[1].split("function requestResume()", 1)[0]
+        self.assertNotIn("pipelineAbort.abort()", pause)
+        self.assertIn("pipelineAbort.abort()", html.split("function requestStop", 1)[1].split("copyYoutubeButton", 1)[0])
         search = html.split("async function searchYoutubeTargets", 1)[1].split("youtubeSearchButton.addEventListener", 1)[0]
         send = html.split("async function sendElitesandTargets", 1)[1].split("sendElitesandButton.addEventListener", 1)[0]
+        self.assertIn("await waitIfPaused()", search)
+        self.assertIn("await waitIfPaused()", send)
         self.assertIn("if (!fromPipeline) clearStopFlags()", search)
         self.assertIn("if (!fromPipeline) clearStopFlags()", send)
         self.assertIn('id="pipeline-stop"', html)
         self.assertIn("暫停", html)
+        self.assertIn("繼續", html)
 
 
 class PlaylistStreamTests(unittest.TestCase):
