@@ -681,7 +681,7 @@
 </div>
 <header>
   <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.7</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。貼上後按「一鍵開始」：先對 Elitesand 已有的歌，搜到的會邊搜邊送給 Elitesand。暫停在最上方流程圖旁邊。</p>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。貼上後按「一鍵開始」：先對 Elitesand 庫，接著邊抓歌單、邊搜 YouTube、邊送給 Elitesand。暫停在最上方流程圖旁邊。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -771,7 +771,7 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>貼上歌單後按「一鍵開始」：先對已有的歌，搜到的會邊搜邊交給 Elitesand。暫停在最上方流程圖旁邊，一次只跑一條流程。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>貼上歌單後按「一鍵開始」：先對已有的歌，接著邊抓歌單、邊搜、邊交給 Elitesand。暫停在最上方流程圖旁邊，一次只跑一條流程。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
   </section>
 </main>
 <footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.7。</footer>
@@ -953,30 +953,96 @@ function flashButton(button, label, ms) {
   }, ms || 1200));
 }
 
-async function loadPlaylistFromUrl(url) {
-  const response = await fetch("/api/songs", {
+async function readNdjson(response, onEvent) {
+  if (!response.body || !response.body.getReader) {
+    const text = await response.text();
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      onEvent(JSON.parse(trimmed));
+    }
+    return;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    if (pipelineWasStopped()) {
+      try { await reader.cancel(); } catch (_) { /* ignore */ }
+      break;
+    }
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf("\n");
+    while (newline >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line) onEvent(JSON.parse(line));
+      newline = buffer.indexOf("\n");
+    }
+  }
+  const last = buffer.trim();
+  if (last) onEvent(JSON.parse(last));
+}
+
+async function streamPlaylistFromUrl(url, handlers) {
+  const response = await fetch("/api/songs-stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
     signal: pipelineAbort.signal
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "抓取失敗。");
-  showList({
-    ...payload,
-    sourceKind: payload.sourceKind || "streamersonglist",
-    exportBase: payload.username || "songs"
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || "抓取失敗。");
+  }
+  let sawSongs = false;
+  await readNdjson(response, (event) => {
+    if (!event || !event.type) return;
+    if (event.type === "error") throw new Error(event.error || "抓取失敗。");
+    if (event.type === "meta" && handlers.onMeta) handlers.onMeta(event);
+    if (event.type === "songs") {
+      sawSongs = true;
+      if (handlers.onSongs) handlers.onSongs(event.songs || []);
+    }
+    if (event.type === "done" && handlers.onDone) handlers.onDone(event);
   });
-  const ready = (payload.songs || []).filter((song) => song.youtubeUrl).length;
-  const n = payload.songs.length;
+  if (!sawSongs && !pipelineWasStopped()) throw new Error("這個網址裡沒有可讀的歌曲。");
+}
+
+async function loadPlaylistFromUrl(url) {
+  let kind = "";
+  setFlowStage("fetch");
+  setFlowHint("fetch", "正在抓…");
+  await streamPlaylistFromUrl(url, {
+    onMeta(meta) {
+      kind = meta.sourceKind || "";
+      showList({
+        ...meta,
+        songs: [],
+        sourceKind: meta.sourceKind || "streamersonglist",
+        exportBase: meta.username || "songs"
+      }, { skipMark: true });
+    },
+    onSongs(batch) {
+      appendSongs(batch);
+      const n = current ? current.songs.length : 0;
+      setFlowHint("fetch", `已抓 ${n} 首`);
+      setStatus(`正在抓歌單…已 ${n} 首。`, false);
+    }
+  });
+  const n = current ? current.songs.length : 0;
+  const ready = current ? current.songs.filter((song) => song.youtubeUrl).length : 0;
   setFlowHint("fetch", `已抓 ${n} 首`);
-  if (payload.sourceKind === "youtube" && ready) {
+  if (kind === "youtube" && ready) {
     setStatus(`已抓到 ${n} 首 YouTube 影片。已在 Elitesand 的會略過，其餘可直接送。`, false);
   } else {
     setStatus(`已抓到 ${n} 首。`, false);
   }
   setFlowStage("check");
-  return payload;
+  markExistingElitesandSongs();
+  return current;
 }
 
 form.addEventListener("submit", async (event) => {
@@ -1149,7 +1215,50 @@ function detectDelimiter(text) {
   return tabs > commas ? "\t" : ",";
 }
 
-function showList(payload) {
+function sourceLabelFor(payload) {
+  return payload.sourceLabel
+    || ({ streamersonglist: "StreamerSonglist", youtube: "YouTube", kkbox: "KKBOX", spotify: "Spotify", sheet: "CSV／試算表" }[payload.sourceKind] || "CSV／試算表");
+}
+
+function updateListMeta() {
+  if (!current) return;
+  const sourceLabel = sourceLabelFor(current);
+  const n = current.songs.length;
+  const total = current.total && current.total > n ? current.total : n;
+  if (current.sourceUrl) {
+    document.getElementById("list-meta").innerHTML = `共 ${total} 首${total !== n ? `（已抓 ${n}）` : ""} · 來源 <a href="${current.sourceUrl}" target="_blank" rel="noreferrer">${sourceLabel}</a>`;
+  } else {
+    document.getElementById("list-meta").textContent = `共 ${n} 首 · 來源 ${sourceLabel}`;
+  }
+}
+
+function addChip(name) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "chip";
+  button.textContent = name;
+  button.setAttribute("aria-pressed", "false");
+  button.addEventListener("click", () => {
+    if (selected.has(name)) selected.delete(name);
+    else selected.add(name);
+    button.setAttribute("aria-pressed", selected.has(name) ? "true" : "false");
+    render();
+  });
+  chipsEl.append(button);
+}
+
+function addChipsFromSongs(songs) {
+  const existing = new Set([...chipsEl.querySelectorAll(".chip")].map((el) => el.textContent));
+  for (const song of songs || []) {
+    for (const name of song.attributes || []) {
+      if (existing.has(name)) continue;
+      existing.add(name);
+      addChip(name);
+    }
+  }
+}
+
+function showList(payload, options) {
   current = payload;
   selected.clear();
   failFilter = "";
@@ -1158,37 +1267,21 @@ function showList(payload) {
   filterYtFail.setAttribute("aria-pressed", "false");
   filterEsFail.setAttribute("aria-pressed", "false");
   document.getElementById("list-title").textContent = `${payload.displayName} 的歌單`;
-  const sourceLabel = payload.sourceLabel
-    || ({ streamersonglist: "StreamerSonglist", youtube: "YouTube", kkbox: "KKBOX", spotify: "Spotify", sheet: "CSV／試算表" }[payload.sourceKind] || "CSV／試算表");
-  if (payload.sourceUrl) {
-    document.getElementById("list-meta").innerHTML = `共 ${payload.songs.length} 首 · 來源 <a href="${payload.sourceUrl}" target="_blank" rel="noreferrer">${sourceLabel}</a>`;
-  } else {
-    document.getElementById("list-meta").textContent = `共 ${payload.songs.length} 首 · 來源 ${sourceLabel}`;
-  }
-  const names = [];
-  for (const song of payload.songs) {
-    for (const name of song.attributes || []) {
-      if (!names.includes(name)) names.push(name);
-    }
-  }
-  chipsEl.replaceChildren(...names.map((name) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "chip";
-    button.textContent = name;
-    button.setAttribute("aria-pressed", "false");
-    button.addEventListener("click", () => {
-      if (selected.has(name)) selected.delete(name);
-      else selected.add(name);
-      button.setAttribute("aria-pressed", selected.has(name) ? "true" : "false");
-      render();
-    });
-    return button;
-  }));
+  chipsEl.replaceChildren();
+  addChipsFromSongs(payload.songs);
+  updateListMeta();
   resultEl.classList.add("show");
   render();
   refreshElitesandStatus();
-  markExistingElitesandSongs();
+  if (!(options && options.skipMark)) markExistingElitesandSongs();
+}
+
+function appendSongs(batch) {
+  if (!current || !batch.length) return;
+  current.songs.push(...batch);
+  addChipsFromSongs(batch);
+  updateListMeta();
+  render();
 }
 
 function visibleSongs() {
@@ -2269,9 +2362,7 @@ sendElitesandButton.addEventListener("click", async () => {
   sendElitesandTargets(pending);
 });
 
-async function overlapSearchAndSend(songs) {
-  const searchTargets = songs.filter((song) => !song.youtubeUrl && !song.elitesandSkipped);
-  const sendTargets = songs.filter((song) => !song.playlistOk && !song.elitesandSkipped);
+function createOverlapEngine() {
   const result = {
     searchOk: 0,
     searchFailed: 0,
@@ -2282,12 +2373,36 @@ async function overlapSearchAndSend(songs) {
     pinStop: false,
     online: true
   };
-  if (!sendTargets.length && !searchTargets.length) return result;
-
+  const searchQueue = [];
+  let crawlDone = false;
+  let wake = () => {};
   let sendChain = Promise.resolve();
   let sendStarted = false;
   let sendIndex = 0;
-  const sendTotal = sendTargets.length;
+  let plannedSend = 0;
+  let plannedSearch = 0;
+  let searchIndex = 0;
+  let crawling = true;
+
+  function poke() {
+    const fn = wake;
+    wake = () => {};
+    fn();
+  }
+
+  function waitForWork() {
+    if (searchQueue.length || crawlDone || pipelineWasStopped()) return Promise.resolve();
+    return new Promise((resolve) => { wake = resolve; });
+  }
+
+  function liveStages() {
+    const steps = [];
+    if (!crawlDone) steps.push("fetch");
+    if (youtubeSearching || searchQueue.length) steps.push("youtube");
+    if (elitesandSending || sendStarted) steps.push("import");
+    if (!steps.length) steps.push(crawlDone ? "import" : "fetch");
+    setFlowStages(steps);
+  }
 
   const enqueueSend = (song) => {
     sendChain = sendChain.then(async () => {
@@ -2309,13 +2424,13 @@ async function overlapSearchAndSend(songs) {
         }
       }
       sendIndex += 1;
-      setFlowStages(youtubeSearching ? ["youtube", "import"] : ["import"]);
-      setFlowHint("import", `正在送 ${sendIndex}/${sendTotal}`);
-      setButtonBusy(sendElitesandButton, true, `正在交給 Elitesand ${sendIndex}/${sendTotal}`);
+      liveStages();
+      setFlowHint("import", `正在送 ${sendIndex}/${Math.max(plannedSend, sendIndex)}`);
+      setButtonBusy(sendElitesandButton, true, `正在交給 Elitesand ${sendIndex}/${Math.max(plannedSend, sendIndex)}`);
       setStatus(
-        youtubeSearching
-          ? `邊搜邊送 ${sendIndex}/${sendTotal}：${song.title}（請等，沒當機）`
-          : `正在交給 Elitesand ${sendIndex}/${sendTotal}：${song.title}（請等，沒當機）`,
+        crawling || youtubeSearching
+          ? `邊抓邊搜邊送 ${sendIndex}/${Math.max(plannedSend, sendIndex)}：${song.title}（請等，沒當機）`
+          : `正在交給 Elitesand ${sendIndex}/${Math.max(plannedSend, sendIndex)}：${song.title}（請等，沒當機）`,
         false
       );
       try {
@@ -2339,52 +2454,93 @@ async function overlapSearchAndSend(songs) {
     });
   };
 
-  youtubeSearching = Boolean(searchTargets.length);
-  setFlowStages(searchTargets.length ? ["youtube", "import"] : ["import"]);
-  if (searchTargets.length) setButtonBusy(youtubeSearchButton, true, "正在搜尋 YouTube…");
-  setButtonBusy(sendElitesandButton, true, "正在交給 Elitesand…");
-  syncStopButtons();
-
-  if (!searchTargets.length) setFlowHint("youtube", "已有網址");
-  for (const song of sendTargets) {
-    if (song.youtubeUrl) enqueueSend(song);
-  }
-
-  for (let i = 0; i < searchTargets.length; i++) {
-    if (pipelineWasStopped()) break;
-    const song = searchTargets[i];
-    setFlowHint("youtube", `正在搜 ${i + 1}/${searchTargets.length}`);
-    setButtonBusy(youtubeSearchButton, true, `正在搜尋 ${i + 1}/${searchTargets.length}`);
-    setStatus(`正在搜 YouTube ${i + 1}/${searchTargets.length}：${song.title}（已搜到的會同時送 Elitesand）`, false);
+  async function searchLoop() {
+    youtubeSearching = true;
+    setButtonBusy(youtubeSearchButton, true, "正在搜尋 YouTube…");
+    setButtonBusy(sendElitesandButton, true, "正在交給 Elitesand…");
+    syncStopButtons();
     try {
-      await searchOneYoutube(song);
-      result.searchOk += 1;
-      enqueueSend(song);
-    } catch (error) {
-      if (error && error.name === "AbortError") break;
-      song.youtubeError = error.message || "搜尋失敗";
-      result.searchFailed += 1;
+      while (!pipelineWasStopped()) {
+        if (!searchQueue.length) {
+          if (crawlDone) break;
+          youtubeSearching = false;
+          liveStages();
+          await waitForWork();
+          youtubeSearching = true;
+          continue;
+        }
+        const song = searchQueue.shift();
+        if (song.elitesandSkipped || song.playlistOk) continue;
+        if (song.youtubeUrl) {
+          enqueueSend(song);
+          continue;
+        }
+        searchIndex += 1;
+        liveStages();
+        setFlowHint("youtube", `正在搜 ${searchIndex}/${Math.max(plannedSearch, searchIndex)}`);
+        setButtonBusy(youtubeSearchButton, true, `正在搜尋 ${searchIndex}/${Math.max(plannedSearch, searchIndex)}`);
+        setStatus(`正在搜 YouTube ${searchIndex}/${Math.max(plannedSearch, searchIndex)}：${song.title}（抓歌單／下載可同時進行）`, false);
+        try {
+          await searchOneYoutube(song);
+          result.searchOk += 1;
+          enqueueSend(song);
+        } catch (error) {
+          if (error && error.name === "AbortError") break;
+          song.youtubeError = error.message || "搜尋失敗";
+          result.searchFailed += 1;
+        }
+        if (searchIndex % 4 === 0 || !searchQueue.length) render();
+      }
+    } finally {
+      youtubeSearching = false;
+      youtubeSearchButton.disabled = true;
     }
-    const last = i === searchTargets.length - 1 || pipelineWasStopped();
-    if (last || i % 4 === 3) render();
+    await sendChain;
+    result.stopped = pipelineWasStopped();
+    setFlowHint("youtube", result.stopped
+      ? `已暫停，成功 ${result.searchOk}，失敗 ${result.searchFailed}`
+      : `成功 ${result.searchOk}，失敗 ${result.searchFailed}`);
+    setFlowHint("import", result.pinStop
+      ? "需要 PIN"
+      : (result.stopped ? `已暫停，新下載 ${result.ok}，失敗 ${result.failed}` : `新下載 ${result.ok}，失敗 ${result.failed}`));
+    elitesandSending = false;
+    sendElitesandButton.disabled = true;
+    syncStopButtons();
+    refreshElitesandStatus();
+    return result;
   }
 
-  youtubeSearching = false;
-  setFlowHint("youtube", pipelineWasStopped()
-    ? `已暫停，成功 ${result.searchOk}，失敗 ${result.searchFailed}`
-    : `成功 ${result.searchOk}，失敗 ${result.searchFailed}`);
-  if (searchTargets.length) setFlowStage("import");
-  youtubeSearchButton.disabled = true;
-  await sendChain;
-  result.stopped = pipelineWasStopped();
-  setFlowHint("import", result.pinStop
-    ? "需要 PIN"
-    : (result.stopped ? `已暫停，新下載 ${result.ok}，失敗 ${result.failed}` : `新下載 ${result.ok}，失敗 ${result.failed}`));
-  elitesandSending = false;
-  sendElitesandButton.disabled = true;
-  syncStopButtons();
-  refreshElitesandStatus();
-  return result;
+  const done = searchLoop();
+  return {
+    addSongs(songs) {
+      for (const song of songs || []) {
+        if (song.elitesandSkipped || song.playlistOk) continue;
+        plannedSend += 1;
+        if (song.youtubeUrl) enqueueSend(song);
+        else {
+          plannedSearch += 1;
+          searchQueue.push(song);
+        }
+      }
+      liveStages();
+      poke();
+    },
+    finishCrawl() {
+      crawling = false;
+      crawlDone = true;
+      if (!plannedSearch) setFlowHint("youtube", plannedSend ? "已有網址" : "不必搜");
+      liveStages();
+      poke();
+    },
+    wait: () => done
+  };
+}
+
+async function overlapSearchAndSend(songs) {
+  const engine = createOverlapEngine();
+  engine.addSongs(songs);
+  engine.finishCrawl();
+  return engine.wait();
 }
 
 function setPipelineBusy(busy, label) {
@@ -2494,6 +2650,91 @@ checkElitesandButton.addEventListener("click", async () => {
   }
 });
 
+async function runOneClickFromUrl(url) {
+  if (pipelineRunning || youtubeSearching || elitesandSending || audioDownloading) return;
+  pipelineRunning = true;
+  clearStopFlags();
+  reclaimFakeSends();
+  setFlowStage("check");
+  setPipelineBusy(true, "一鍵開始中…");
+  try {
+    setStatus("先對 Elitesand 已有的歌…", false);
+    const online = await refreshElitesandStatus();
+    if (pipelineWasStopped()) {
+      setStatus("已暫停。", false);
+      return;
+    }
+    if (!online) {
+      setStatus("請先打開 Elitesand Pro，再按「一鍵開始」。", true);
+      await promptOpenElitesand();
+      return;
+    }
+    await loadElitesandLibraryIndex(true);
+    if (pipelineWasStopped()) {
+      setStatus("已暫停。", false);
+      return;
+    }
+    setFlowHint("check", "已連上庫，開始抓歌單");
+    setFlowStages(["fetch", "check"]);
+    setFlowHint("fetch", "正在抓…");
+    setStatus("正在抓歌單，搜到的會同時送 Elitesand…", false);
+    const engine = createOverlapEngine();
+    let skipped = 0;
+    let crawlError = null;
+    try {
+      await streamPlaylistFromUrl(url, {
+        onMeta(meta) {
+          showList({
+            ...meta,
+            songs: [],
+            sourceKind: meta.sourceKind || "streamersonglist",
+            exportBase: meta.username || "songs"
+          }, { skipMark: true });
+        },
+        onSongs(batch) {
+          skipped += applyKnownElitesand(batch, elitesandLibraryCache.index || libraryIndexFromTracks([]));
+          appendSongs(batch);
+          engine.addSongs(batch);
+          const n = current.songs.length;
+          const remain = current.songs.filter((song) => !song.elitesandSkipped).length;
+          setFlowHint("fetch", `已抓 ${n} 首`);
+          setFlowHint("check", checkHintText(skipped, remain, elitesandLibraryCache.trackCount || 0));
+        }
+      });
+    } catch (error) {
+      crawlError = error;
+    } finally {
+      engine.finishCrawl();
+    }
+    const sendResult = await engine.wait();
+    if (crawlError) throw crawlError;
+    if (!sendResult.online) return;
+    if (sendResult.pinStop) return;
+    const n = current ? current.songs.length : 0;
+    setFlowHint("fetch", `已抓 ${n} 首`);
+    const done = `略過已有 ${skipped + sendResult.skipped} 首，新下載 ${sendResult.ok} 首，YouTube 失敗 ${sendResult.searchFailed} 首，送出失敗 ${sendResult.failed} 首。`;
+    if (sendResult.stopped || pipelineWasStopped()) {
+      finishWithFails(`已暫停。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
+      return;
+    }
+    setFlowStage("done");
+    setFlowHint("done", (sendResult.failed || sendResult.searchFailed) ? "完成，有失敗" : "好了");
+    finishWithFails(`一鍵開始完成。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
+    await promptDownloadDone();
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      setStatus("已暫停。", false);
+      return;
+    }
+    setStatus(networkErrorMessage(error, "抓取歌單"), true);
+  } finally {
+    pipelineRunning = false;
+    setPipelineBusy(false);
+    refreshFlowStage();
+    render();
+  }
+}
+
 oneClickFetchButton.addEventListener("click", async () => {
   if (anyWorkRunning()) return;
   const url = urlInput.value.trim();
@@ -2502,29 +2743,7 @@ oneClickFetchButton.addEventListener("click", async () => {
     urlInput.focus();
     return;
   }
-  let started = false;
-  clearStopFlags();
-  setFlowStage("fetch");
-  setFlowHint("fetch", "正在抓…");
-  setPipelineBusy(true, "正在抓取…");
-  setStatus("正在抓取歌單…", false);
-  try {
-    await loadPlaylistFromUrl(url);
-    if (pipelineWasStopped()) {
-      setStatus("已暫停。", false);
-      return;
-    }
-    started = true;
-    await runOneClickPipeline();
-  } catch (error) {
-    if (error && error.name === "AbortError") {
-      setStatus("已暫停。", false);
-      return;
-    }
-    setStatus(networkErrorMessage(error, "抓取歌單"), true);
-  } finally {
-    if (!started) setPipelineBusy(false);
-  }
+  await runOneClickFromUrl(url);
 });
 
 oneClickSheetButton.addEventListener("click", async () => {

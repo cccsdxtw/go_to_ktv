@@ -255,13 +255,25 @@ def attribute_names(song):
     return names
 
 
-def fetch_songs(username):
-    songs = []
+def _normalize_ssl_song(song):
+    return {
+        "id": song.get("id"),
+        "title": song.get("title") or "",
+        "artist": song.get("artist") or "",
+        "attributes": attribute_names(song),
+        "lastPlayed": day(song.get("lastPlayed")),
+        "timesPlayed": song.get("timesPlayed") or 0,
+    }
+
+
+def iter_streamersonglist(username):
     seen_ids = set()
     seen_tokens = set()
     token = ""
     total = None
     display_name = username
+    count = 0
+    meta_sent = False
     for _ in range(MAX_PAGES):
         url = f"https://streamersonglist.com/t/{urllib.parse.quote(username)}/songs.data"
         if token:
@@ -280,41 +292,78 @@ def fetch_songs(username):
         page = route_data(payload, "./routes/streamer/songs")
         if "songs" not in page:
             raise SongListError("找不到這個歌單，請確認網址。")
+        if not meta_sent:
+            meta_sent = True
+            yield {
+                "type": "meta",
+                "username": username,
+                "displayName": display_name,
+                "total": page.get("total") if isinstance(page.get("total"), int) else None,
+                "sourceUrl": f"https://streamersonglist.com/t/{username}/songs",
+                "sourceKind": "streamersonglist",
+                "sourceLabel": "StreamerSonglist",
+            }
         batch = page.get("songs") or []
         total = page.get("total") if isinstance(page.get("total"), int) else total
-        added = 0
+        added = []
         for song in batch:
             song_id = song.get("id")
             if song_id in seen_ids:
                 continue
             seen_ids.add(song_id)
-            songs.append(
-                {
-                    "id": song_id,
-                    "title": song.get("title") or "",
-                    "artist": song.get("artist") or "",
-                    "attributes": attribute_names(song),
-                    "lastPlayed": day(song.get("lastPlayed")),
-                    "timesPlayed": song.get("timesPlayed") or 0,
-                }
-            )
-            added += 1
-            if len(songs) >= MAX_SONGS:
+            added.append(_normalize_ssl_song(song))
+            count += 1
+            if count >= MAX_SONGS:
                 break
+        if added:
+            yield {"type": "songs", "songs": added}
         token = page.get("token") or ""
-        if not batch or added == 0 or not token or (total is not None and len(songs) >= total):
+        if not batch or not added or not token or (total is not None and count >= total):
             break
-        if len(songs) >= MAX_SONGS:
+        if count >= MAX_SONGS:
             break
-    return {
-        "username": username,
-        "displayName": display_name,
-        "total": total if total is not None else len(songs),
-        "songs": songs,
-        "sourceUrl": f"https://streamersonglist.com/t/{username}/songs",
-        "sourceKind": "streamersonglist",
-        "sourceLabel": "StreamerSonglist",
-    }
+    yield {"type": "done", "total": total if total is not None else count}
+
+
+def playlist_from_events(events):
+    meta = {}
+    songs = []
+    for event in events:
+        kind = event.get("type")
+        if kind == "meta":
+            meta = {key: value for key, value in event.items() if key != "type"}
+        elif kind == "songs":
+            songs.extend(event.get("songs") or [])
+        elif kind == "done":
+            if event.get("total") is not None:
+                meta["total"] = event["total"]
+        elif kind == "error":
+            raise SongListError(event.get("error") or "抓取失敗。")
+    meta["songs"] = songs
+    if not meta.get("total"):
+        meta["total"] = len(songs)
+    return meta
+
+
+def fetch_songs(username):
+    return playlist_from_events(iter_streamersonglist(username))
+
+
+def iter_complete_playlist(result, chunk=8):
+    songs = list(result.get("songs") or [])
+    meta = {key: value for key, value in result.items() if key != "songs"}
+    yield {"type": "meta", **meta}
+    for index in range(0, len(songs), chunk):
+        yield {"type": "songs", "songs": songs[index:index + chunk]}
+    yield {"type": "done", "total": meta.get("total") if meta.get("total") is not None else len(songs)}
+
+
+def iter_import_playlist(raw_url):
+    detected = detect_playlist(raw_url)
+    if detected["kind"] == "streamersonglist":
+        yield from iter_streamersonglist(detected["username"])
+        return
+    yield from iter_complete_playlist(import_playlist(raw_url))
 
 
 def normalize_url(raw_url):
@@ -1668,6 +1717,41 @@ class Handler(BaseHTTPRequestHandler):
                 return
             print(f"{result.get('sourceKind')}: {result.get('displayName')}: {len(result['songs'])} songs", flush=True)
             self.respond_json(200, result)
+            return
+        if path == "/api/songs-stream":
+            started = False
+            try:
+                incoming = read_json_body(self, 4000, "請貼上歌單網址。")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                started = True
+                count = 0
+                kind = ""
+                name = ""
+                for event in iter_import_playlist(incoming.get("url")):
+                    if event.get("type") == "meta":
+                        kind = event.get("sourceKind") or ""
+                        name = event.get("displayName") or ""
+                    elif event.get("type") == "songs":
+                        count += len(event.get("songs") or [])
+                    line = json.dumps(event, ensure_ascii=False) + "\n"
+                    self.wfile.write(line.encode("utf-8"))
+                    self.wfile.flush()
+                print(f"stream {kind}: {name}: {count} songs", flush=True)
+            except SongListError as error:
+                if not started:
+                    self.respond_json(400, {"error": str(error)})
+                    return
+                try:
+                    line = json.dumps({"type": "error", "error": str(error)}, ensure_ascii=False) + "\n"
+                    self.wfile.write(line.encode("utf-8"))
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    pass
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
             return
         if path == "/api/youtube-search":
             try:

@@ -19,7 +19,7 @@
 
 1. 先打開 Elitesand，再貼上網址或試算表，按「**一鍵開始**」  
    網址支援：**StreamerSonglist**、**YouTube 播放清單／單支影片**、**KKBOX**、**Spotify** 歌單／專輯／歌曲
-2. 頁面最上方有固定流程：截取歌曲 → 確定Elitesand歌單 → YT搜尋 → 匯入Elitesand下載 → 完成。暫停在流程圖旁邊，一次只跑一條。一鍵開始時，搜到的歌會邊搜邊送給 Elitesand（下載仍一首一首）。可自己按「確定Elitesand歌單」看略過了幾首。
+2. 頁面最上方有固定流程：截取歌曲 → 確定Elitesand歌單 → YT搜尋 → 匯入Elitesand下載 → 完成。暫停在流程圖旁邊，一次只跑一條。貼網址按一鍵開始後：先對 Elitesand 庫，接著邊抓歌單、邊搜 YouTube、邊送給 Elitesand（下載仍一首一首）。可自己按「確定Elitesand歌單」看略過了幾首。
 3. 若要先看歌單再動手，改按「抓取歌單」或「轉成歌單」。YouTube 欄可「去聽」、按「另外 N 筆」改選
 4. 也可以分開按「搜尋 YouTube」或「送到 Elitesand 下載」
 

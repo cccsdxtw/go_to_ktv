@@ -291,11 +291,16 @@ class OneClickPipelineTests(unittest.TestCase):
         self.assertIn("pipelineWasStopped()", fn)
         self.assertIn("promptDownloadDone", fn)
         self.assertIn("已暫停", fn)
-        overlap = html.split("async function overlapSearchAndSend", 1)[1].split("function setPipelineBusy", 1)[0]
+        overlap = html.split("function createOverlapEngine()", 1)[1].split("async function overlapSearchAndSend", 1)[0]
         self.assertIn("enqueueSend", overlap)
         self.assertIn("searchOneYoutube", overlap)
         self.assertIn("sendOneElitesand", overlap)
-        self.assertIn('setFlowStages(youtubeSearching ? ["youtube", "import"] : ["import"])', overlap)
+        self.assertIn("finishCrawl", overlap)
+        self.assertIn("/api/songs-stream", html)
+        self.assertIn("async function runOneClickFromUrl", html)
+        from_url = html.split("async function runOneClickFromUrl", 1)[1].split("oneClickFetchButton.addEventListener", 1)[0]
+        self.assertLess(from_url.index("loadElitesandLibraryIndex(true)"), from_url.index("streamPlaylistFromUrl"))
+        self.assertLess(from_url.index("streamPlaylistFromUrl"), from_url.index("engine.addSongs"))
 
     def test_stop_clears_and_aborts(self):
         html = Path("index.html").read_text(encoding="utf-8")
@@ -307,6 +312,53 @@ class OneClickPipelineTests(unittest.TestCase):
         self.assertIn("if (!fromPipeline) clearStopFlags()", send)
         self.assertIn('id="pipeline-stop"', html)
         self.assertIn("暫停", html)
+
+
+class PlaylistStreamTests(unittest.TestCase):
+    def test_ssl_emits_first_page_before_second_fetch(self):
+        pages = [
+            {
+                "./routes/streamer/_streamer": {
+                    "streamer": {"platforms": {"twitch": {"displayName": "Ada"}}}
+                },
+                "./routes/streamer/songs": {
+                    "songs": [{"id": 1, "title": "A", "artist": "X"}],
+                    "token": "next",
+                    "total": 2,
+                },
+            },
+            {
+                "./routes/streamer/_streamer": {},
+                "./routes/streamer/songs": {
+                    "songs": [{"id": 2, "title": "B", "artist": "Y"}],
+                    "token": "",
+                    "total": 2,
+                },
+            },
+        ]
+        calls = []
+
+        def fake_payload(url):
+            calls.append(url)
+            return pages[len(calls) - 1]
+
+        with mock.patch.object(server, "fetch_payload", side_effect=fake_payload):
+            events = list(server.iter_streamersonglist("ada"))
+        self.assertEqual(events[0]["type"], "meta")
+        self.assertEqual(events[1]["type"], "songs")
+        self.assertEqual(events[1]["songs"][0]["title"], "A")
+        self.assertEqual(events[2]["type"], "songs")
+        self.assertEqual(events[2]["songs"][0]["title"], "B")
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertEqual(len(calls), 2)
+        assembled = server.playlist_from_events(events)
+        self.assertEqual(len(assembled["songs"]), 2)
+        self.assertEqual(assembled["displayName"], "Ada")
+
+    def test_stream_route_exists(self):
+        text = Path("server.py").read_text(encoding="utf-8")
+        self.assertIn('path == "/api/songs-stream"', text)
+        self.assertIn("def iter_import_playlist", text)
 
 
 class StickyFlowChartTests(unittest.TestCase):
