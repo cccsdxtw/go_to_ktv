@@ -301,21 +301,65 @@
     background: #365853;
     box-shadow: none;
   }
-  .action-row.zone-check { background: var(--flow-check-bg); border-color: var(--flow-check-line); }
+  .action-row.zone-check,
+  .action-stack.zone-check { background: var(--flow-check-bg); border-color: var(--flow-check-line); }
+  .action-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .action-stack .action-row {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
   .action-row.zone-check .row-label,
-  .action-row.zone-check button {
+  .action-row.zone-check button,
+  .action-stack.zone-check .row-label,
+  .action-stack.zone-check button,
+  .action-stack.zone-check .conc-field {
     color: var(--flow-check-text);
   }
   .action-row.zone-check button.primary,
-  .action-row.zone-check button.ghost {
+  .action-row.zone-check button.ghost,
+  .action-stack.zone-check button.primary,
+  .action-stack.zone-check button.ghost {
     background: var(--flow-check-btn);
     border: 1px solid var(--flow-check-line);
     font-weight: 650;
   }
   .action-row.zone-check button.primary:hover:not(:disabled),
-  .action-row.zone-check button.ghost:hover:not(:disabled) {
+  .action-row.zone-check button.ghost:hover:not(:disabled),
+  .action-stack.zone-check button.primary:hover:not(:disabled),
+  .action-stack.zone-check button.ghost:hover:not(:disabled) {
     background: #3d5168;
     box-shadow: none;
+  }
+  .conc-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .conc-field select {
+    background: #151821;
+    color: inherit;
+    border: 1px solid var(--flow-check-line);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font: inherit;
+  }
+  .conc-risk {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    max-width: 62em;
+    opacity: 0.9;
   }
   .action-row.zone-yt { background: var(--flow-yt-bg); border-color: var(--flow-yt-line); }
   .action-row.zone-yt .row-label,
@@ -681,7 +725,7 @@
 </div>
 <header>
   <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.7</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。貼上後按「一鍵開始」：先對 Elitesand 庫，接著邊抓歌單、邊搜 YouTube、邊送給 Elitesand。暫停在最上方流程圖旁邊。</p>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。流程框可選同時下載幾首，每次打開都是 1。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -694,7 +738,8 @@
         <label class="sr-only" for="url">歌單網址</label>
         <input id="url" type="url" name="url" required placeholder="StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單網址" autocomplete="off">
         <button class="ghost" id="fetch" type="submit">抓取歌單</button>
-        <button class="primary" id="one-click-fetch" type="button">一鍵開始</button>
+        <button class="primary" id="one-click-fetch-serial" type="button">一鍵開始(順序)</button>
+        <button class="primary" id="one-click-fetch-parallel" type="button">一鍵開始(並行)</button>
       </form>
     </section>
     <section class="source-card zone-fetch">
@@ -706,7 +751,8 @@
         <label class="file-btn" for="sheet-file">選擇 CSV 檔</label>
         <input id="sheet-file" type="file" accept=".csv,text/csv,text/plain">
         <button class="ghost" id="sheet-parse" type="button">轉成歌單</button>
-        <button class="primary" id="one-click-sheet" type="button">一鍵開始</button>
+        <button class="primary" id="one-click-sheet-serial" type="button">一鍵開始(順序)</button>
+        <button class="primary" id="one-click-sheet-parallel" type="button">一鍵開始(並行)</button>
       </div>
     </section>
   </div>
@@ -719,10 +765,22 @@
         <p class="hint">找不到 Elitesand、或「送到 Elitesand 下載」一直停住時：看工作列<strong>右下角往上的小箭頭</strong>，把 VPN／虛擬區網（常見如 Radmin VPN、Tailscale、Clash）先<strong>中斷連線</strong>或關掉，改用這台電腦自己的 Wi‑Fi／網路線。用完這個頁面再把它開回去即可。Mac 則在選單列的 VPN／Clash 圖示裡中斷。</p>
       </div>
       <div class="action-groups">
-        <div class="action-row zone-check">
-          <span class="row-label">流程</span>
-          <button class="primary" id="one-click" type="button">一鍵開始</button>
-          <button class="ghost" id="check-elitesand" type="button">確定Elitesand歌單</button>
+        <div class="action-stack zone-check">
+          <div class="action-row">
+            <span class="row-label">流程</span>
+            <button class="primary" id="one-click-serial" type="button">一鍵開始(順序)</button>
+            <button class="primary" id="one-click-parallel" type="button">一鍵開始(並行)</button>
+            <button class="ghost" id="check-elitesand" type="button">確定Elitesand歌單</button>
+            <label class="conc-field" for="send-concurrency">同時下載
+              <select id="send-concurrency">
+                <option value="1" selected>1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+          </div>
+          <p class="conc-risk">同時下載預設 1，每次打開都是 1。Elitesand 沒保證能同時收多首；調高可能搶資源、掛清單順序亂、重複或失敗。</p>
         </div>
         <div class="action-row">
           <span class="row-label">下載區</span>
@@ -771,7 +829,7 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>貼上歌單後按「一鍵開始」：先對已有的歌，接著邊抓歌單、邊搜、邊交給 Elitesand。暫停在最上方流程圖旁邊，一次只跑一條流程。失敗可改歌名／歌手後重試。Elitesand 有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載預設 1（每次打開都是 1）；調高是冒險，Elitesand 沒保證吃得下。暫停在最上方。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
   </section>
 </main>
 <footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.7。</footer>
@@ -794,10 +852,22 @@ const downloadAudioButton = document.getElementById("download-audio");
 const openAudioFolderButton = document.getElementById("open-audio-folder");
 const sendElitesandButton = document.getElementById("send-elitesand");
 const elitesandPinInput = document.getElementById("elitesand-pin");
-const oneClickButton = document.getElementById("one-click");
-const oneClickFetchButton = document.getElementById("one-click-fetch");
-const oneClickSheetButton = document.getElementById("one-click-sheet");
+const oneClickSerialButton = document.getElementById("one-click-serial");
+const oneClickParallelButton = document.getElementById("one-click-parallel");
+const oneClickFetchSerialButton = document.getElementById("one-click-fetch-serial");
+const oneClickFetchParallelButton = document.getElementById("one-click-fetch-parallel");
+const oneClickSheetSerialButton = document.getElementById("one-click-sheet-serial");
+const oneClickSheetParallelButton = document.getElementById("one-click-sheet-parallel");
+const oneClickButtons = [
+  oneClickSerialButton,
+  oneClickParallelButton,
+  oneClickFetchSerialButton,
+  oneClickFetchParallelButton,
+  oneClickSheetSerialButton,
+  oneClickSheetParallelButton
+];
 const checkElitesandButton = document.getElementById("check-elitesand");
+const sendConcurrencySelect = document.getElementById("send-concurrency");
 const pipelineStopButton = document.getElementById("pipeline-stop");
 const elitesandStatusEl = document.getElementById("elitesand-status");
 const statusEl = document.getElementById("status");
@@ -918,6 +988,7 @@ async function detectServer() {
 detectServer();
 refreshElitesandStatus();
 syncStopButtons();
+if (sendConcurrencySelect) sendConcurrencySelect.value = "1";
 setInterval(refreshElitesandStatus, 8000);
 
 function networkErrorMessage(error, action) {
@@ -2282,32 +2353,39 @@ async function sendElitesandTargets(targets, options) {
   let failed = 0;
   let pinStop = false;
   try {
-    for (let i = 0; i < targets.length; i++) {
-      if (pipelineWasStopped()) break;
-      const song = targets[i];
-      if (song.elitesandSkipped || song.playlistOk) continue;
-      setFlowHint("import", `正在送 ${i + 1}/${targets.length}`);
-      setButtonBusy(sendElitesandButton, true, `正在交給 Elitesand ${i + 1}/${targets.length}`);
-      setStatus(`正在交給 Elitesand ${i + 1}/${targets.length}：${song.title}（請等，沒當機）`, false);
-      try {
-        await sendOneElitesand(song);
-        if (song.elitesandSkipped) skipped += 1;
-        else ok += 1;
-      } catch (error) {
-        if (error && error.name === "AbortError") break;
-        song.elitesandOk = false;
-        song.playlistOk = false;
-        song.elitesandFile = "";
-        song.audioError = error.message || "送到 Elitesand 失敗";
-        failed += 1;
-        if (/需要 PIN/.test(song.audioError)) {
-          pinStop = true;
-          elitesandStopRequested = true;
-          pipelineStopRequested = true;
+    const pool = createSendPool();
+    let sent = 0;
+    const total = targets.length;
+    const concNote = pool.conc > 1 ? `，同時 ${pool.conc} 首` : "";
+    for (const song of targets) {
+      pool.enqueue(async () => {
+        if (pinStop || pipelineWasStopped()) return;
+        if (song.elitesandSkipped || song.playlistOk) return;
+        sent += 1;
+        setFlowHint("import", `正在送 ${sent}/${total}`);
+        setButtonBusy(sendElitesandButton, true, `正在交給 Elitesand ${sent}/${total}`);
+        setStatus(`正在交給 Elitesand ${sent}/${total}：${song.title}（請等，沒當機${concNote}）`, false);
+        try {
+          await sendOneElitesand(song);
+          if (song.elitesandSkipped) skipped += 1;
+          else ok += 1;
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+          song.elitesandOk = false;
+          song.playlistOk = false;
+          song.elitesandFile = "";
+          song.audioError = error.message || "送到 Elitesand 失敗";
+          failed += 1;
+          if (/需要 PIN/.test(song.audioError)) {
+            pinStop = true;
+            elitesandStopRequested = true;
+            pipelineStopRequested = true;
+          }
         }
-      }
-      render();
+        render();
+      });
     }
+    await pool.wait();
     const stopped = pipelineWasStopped();
     setFlowHint("import", pinStop
       ? "需要 PIN"
@@ -2362,6 +2440,41 @@ sendElitesandButton.addEventListener("click", async () => {
   sendElitesandTargets(pending);
 });
 
+function sendConcurrency() {
+  const n = parseInt(sendConcurrencySelect && sendConcurrencySelect.value, 10);
+  if (!(n >= 1)) return 1;
+  return Math.min(4, n);
+}
+
+function createSendPool() {
+  const conc = sendConcurrency();
+  const workers = Array.from({ length: conc }, () => Promise.resolve());
+  let next = 0;
+  let inFlight = 0;
+  return {
+    conc,
+    enqueue(job) {
+      const slot = next % workers.length;
+      next += 1;
+      workers[slot] = workers[slot].then(async () => {
+        if (pipelineWasStopped()) return;
+        inFlight += 1;
+        elitesandSending = true;
+        syncStopButtons();
+        try {
+          await job();
+        } finally {
+          inFlight -= 1;
+          if (!inFlight) syncStopButtons();
+        }
+      });
+    },
+    wait() {
+      return Promise.all(workers);
+    }
+  };
+}
+
 function createOverlapEngine() {
   const result = {
     searchOk: 0,
@@ -2376,7 +2489,7 @@ function createOverlapEngine() {
   const searchQueue = [];
   let crawlDone = false;
   let wake = () => {};
-  let sendChain = Promise.resolve();
+  const sendPool = createSendPool();
   let sendStarted = false;
   let sendIndex = 0;
   let plannedSend = 0;
@@ -2405,11 +2518,9 @@ function createOverlapEngine() {
   }
 
   const enqueueSend = (song) => {
-    sendChain = sendChain.then(async () => {
+    sendPool.enqueue(async () => {
       if (result.pinStop || !result.online || pipelineWasStopped()) return;
       if (!song.youtubeUrl || song.elitesandSkipped || song.playlistOk) return;
-      elitesandSending = true;
-      syncStopButtons();
       if (!sendStarted) {
         sendStarted = true;
         setStatus("已點到，正在連 Elitesand（下載一首會比較久）…", false);
@@ -2427,10 +2538,11 @@ function createOverlapEngine() {
       liveStages();
       setFlowHint("import", `正在送 ${sendIndex}/${Math.max(plannedSend, sendIndex)}`);
       setButtonBusy(sendElitesandButton, true, `正在交給 Elitesand ${sendIndex}/${Math.max(plannedSend, sendIndex)}`);
+      const concNote = sendPool.conc > 1 ? `，同時 ${sendPool.conc} 首` : "";
       setStatus(
         crawling || youtubeSearching
-          ? `邊抓邊搜邊送 ${sendIndex}/${Math.max(plannedSend, sendIndex)}：${song.title}（請等，沒當機）`
-          : `正在交給 Elitesand ${sendIndex}/${Math.max(plannedSend, sendIndex)}：${song.title}（請等，沒當機）`,
+          ? `邊抓邊搜邊送 ${sendIndex}/${Math.max(plannedSend, sendIndex)}：${song.title}（請等，沒當機${concNote}）`
+          : `正在交給 Elitesand ${sendIndex}/${Math.max(plannedSend, sendIndex)}：${song.title}（請等，沒當機${concNote}）`,
         false
       );
       try {
@@ -2495,7 +2607,7 @@ function createOverlapEngine() {
       youtubeSearching = false;
       youtubeSearchButton.disabled = true;
     }
-    await sendChain;
+    await sendPool.wait();
     result.stopped = pipelineWasStopped();
     setFlowHint("youtube", result.stopped
       ? `已暫停，成功 ${result.searchOk}，失敗 ${result.searchFailed}`
@@ -2545,23 +2657,65 @@ async function overlapSearchAndSend(songs) {
 
 function setPipelineBusy(busy, label) {
   pipelineControlsBusy = busy;
-  setButtonBusy(oneClickButton, busy, label);
-  setButtonBusy(oneClickFetchButton, busy, label);
-  setButtonBusy(oneClickSheetButton, busy, label);
+  for (const button of oneClickButtons) setButtonBusy(button, busy, label);
   setButtonBusy(checkElitesandButton, busy, label);
   fetchButton.disabled = busy;
   sheetParse.disabled = busy;
   youtubeSearchButton.disabled = busy;
   sendElitesandButton.disabled = busy;
+  if (sendConcurrencySelect) sendConcurrencySelect.disabled = busy;
   syncStopButtons();
 }
 
-async function runOneClickPipeline() {
+function oneClickSummary(skipped, sendResult) {
+  return `略過已有 ${skipped + (sendResult.skipped || 0)} 首，新下載 ${sendResult.ok || 0} 首，YouTube 失敗 ${sendResult.searchFailed || 0} 首，送出失敗 ${sendResult.failed || 0} 首。`;
+}
+
+async function runSerialSearchThenSend(work) {
+  const needSearch = work.filter((song) => !song.youtubeUrl);
+  let searchOk = 0;
+  let searchFailed = 0;
+  if (needSearch.length) {
+    setPipelineBusy(true, "搜尋 YouTube 中…");
+    const searchResult = await searchYoutubeTargets(needSearch, { fromPipeline: true });
+    searchOk = searchResult.ok;
+    searchFailed = searchResult.failed;
+    if (searchResult.stopped || pipelineWasStopped()) {
+      return { ok: 0, skipped: 0, failed: 0, searchOk, searchFailed, stopped: true, pinStop: false, online: true };
+    }
+  } else {
+    setFlowHint("youtube", "已有網址");
+  }
+  const toSend = work.filter((song) => song.youtubeUrl && !song.elitesandSkipped && !song.playlistOk);
+  if (!toSend.length) {
+    return { ok: 0, skipped: 0, failed: 0, searchOk, searchFailed, stopped: false, pinStop: false, online: true };
+  }
+  setPipelineBusy(true, "下載中…");
+  const sendResult = await sendElitesandTargets(toSend, { fromPipeline: true });
+  return { ...sendResult, searchOk, searchFailed };
+}
+
+async function finishOneClickResult(skipped, sendResult) {
+  if (!sendResult.online) return;
+  if (sendResult.pinStop) return;
+  const done = oneClickSummary(skipped, sendResult);
+  if (sendResult.stopped || pipelineWasStopped()) {
+    finishWithFails(`已暫停。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
+    return;
+  }
+  setFlowStage("done");
+  setFlowHint("done", (sendResult.failed || sendResult.searchFailed) ? "完成，有失敗" : "好了");
+  finishWithFails(`一鍵開始完成。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
+  await promptDownloadDone();
+}
+
+async function runOneClickPipeline(mode) {
   if (pipelineRunning || youtubeSearching || elitesandSending || audioDownloading) return;
   if (!current) {
     setStatus("請先貼歌單網址或試算表內容。", true);
     return;
   }
+  const parallel = mode === "parallel";
   pipelineRunning = true;
   clearStopFlags();
   reclaimFakeSends();
@@ -2592,19 +2746,11 @@ async function runOneClickPipeline() {
       await promptDownloadDone();
       return;
     }
-    setPipelineBusy(true, "搜尋並下載中…");
-    const sendResult = await overlapSearchAndSend(work);
-    if (!sendResult.online) return;
-    if (sendResult.pinStop) return;
-    const done = `略過已有 ${skipped + sendResult.skipped} 首，新下載 ${sendResult.ok} 首，YouTube 失敗 ${sendResult.searchFailed} 首，送出失敗 ${sendResult.failed} 首。`;
-    if (sendResult.stopped || pipelineWasStopped()) {
-      finishWithFails(`已暫停。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
-      return;
-    }
-    setFlowStage("done");
-    setFlowHint("done", (sendResult.failed || sendResult.searchFailed) ? `完成，有失敗` : "好了");
-    finishWithFails(`一鍵開始完成。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
-    await promptDownloadDone();
+    setPipelineBusy(true, parallel ? "邊搜邊送中…" : "搜尋並下載中…");
+    const sendResult = parallel
+      ? await overlapSearchAndSend(work)
+      : await runSerialSearchThenSend(work);
+    await finishOneClickResult(skipped, sendResult);
   } finally {
     pipelineRunning = false;
     setPipelineBusy(false);
@@ -2613,8 +2759,11 @@ async function runOneClickPipeline() {
   }
 }
 
-oneClickButton.addEventListener("click", () => {
-  runOneClickPipeline();
+oneClickSerialButton.addEventListener("click", () => {
+  runOneClickPipeline("serial");
+});
+oneClickParallelButton.addEventListener("click", () => {
+  runOneClickPipeline("parallel");
 });
 
 checkElitesandButton.addEventListener("click", async () => {
@@ -2650,8 +2799,9 @@ checkElitesandButton.addEventListener("click", async () => {
   }
 });
 
-async function runOneClickFromUrl(url) {
+async function runOneClickFromUrl(url, mode) {
   if (pipelineRunning || youtubeSearching || elitesandSending || audioDownloading) return;
+  const parallel = mode === "parallel";
   pipelineRunning = true;
   clearStopFlags();
   reclaimFakeSends();
@@ -2677,6 +2827,31 @@ async function runOneClickFromUrl(url) {
     setFlowHint("check", "已連上庫，開始抓歌單");
     setFlowStages(["fetch", "check"]);
     setFlowHint("fetch", "正在抓…");
+    if (!parallel) {
+      setStatus("正在抓歌單（抓完再搜、再送）…", false);
+      await loadPlaylistFromUrl(url);
+      if (pipelineWasStopped()) {
+        setStatus("已暫停。", false);
+        return;
+      }
+      const skipped = await markExistingElitesandSongs(true);
+      if (pipelineWasStopped()) {
+        setStatus("已暫停。", false);
+        return;
+      }
+      const work = visibleSongs().filter((song) => !song.elitesandSkipped && !song.playlistOk);
+      if (!work.length) {
+        setFlowStage("done");
+        setFlowHint("done", skipped ? "沒有要新下載的歌" : "好了");
+        finishWithFails(`一鍵開始完成。略過已有 ${skipped} 首，沒有需要新下載的歌。`, sendFailedSongs());
+        await promptDownloadDone();
+        return;
+      }
+      setPipelineBusy(true, "搜尋並下載中…");
+      const sendResult = await runSerialSearchThenSend(work);
+      await finishOneClickResult(skipped, sendResult);
+      return;
+    }
     setStatus("正在抓歌單，搜到的會同時送 Elitesand…", false);
     const engine = createOverlapEngine();
     let skipped = 0;
@@ -2708,19 +2883,9 @@ async function runOneClickFromUrl(url) {
     }
     const sendResult = await engine.wait();
     if (crawlError) throw crawlError;
-    if (!sendResult.online) return;
-    if (sendResult.pinStop) return;
     const n = current ? current.songs.length : 0;
     setFlowHint("fetch", `已抓 ${n} 首`);
-    const done = `略過已有 ${skipped + sendResult.skipped} 首，新下載 ${sendResult.ok} 首，YouTube 失敗 ${sendResult.searchFailed} 首，送出失敗 ${sendResult.failed} 首。`;
-    if (sendResult.stopped || pipelineWasStopped()) {
-      finishWithFails(`已暫停。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
-      return;
-    }
-    setFlowStage("done");
-    setFlowHint("done", (sendResult.failed || sendResult.searchFailed) ? "完成，有失敗" : "好了");
-    finishWithFails(`一鍵開始完成。${done}`, [...ytFailedSongs(), ...sendFailedSongs()]);
-    await promptDownloadDone();
+    await finishOneClickResult(skipped, sendResult);
   } catch (error) {
     if (error && error.name === "AbortError") {
       setStatus("已暫停。", false);
@@ -2735,7 +2900,7 @@ async function runOneClickFromUrl(url) {
   }
 }
 
-oneClickFetchButton.addEventListener("click", async () => {
+async function startOneClickFromUrl(mode) {
   if (anyWorkRunning()) return;
   const url = urlInput.value.trim();
   if (!url) {
@@ -2743,10 +2908,10 @@ oneClickFetchButton.addEventListener("click", async () => {
     urlInput.focus();
     return;
   }
-  await runOneClickFromUrl(url);
-});
+  await runOneClickFromUrl(url, mode);
+}
 
-oneClickSheetButton.addEventListener("click", async () => {
+async function startOneClickFromSheet(mode) {
   if (anyWorkRunning()) return;
   try {
     applySheetText(sheetText.value, "sheet-import");
@@ -2754,8 +2919,13 @@ oneClickSheetButton.addEventListener("click", async () => {
     setStatus(error.message || "解析失敗。", true);
     return;
   }
-  await runOneClickPipeline();
-});
+  await runOneClickPipeline(mode);
+}
+
+oneClickFetchSerialButton.addEventListener("click", () => startOneClickFromUrl("serial"));
+oneClickFetchParallelButton.addEventListener("click", () => startOneClickFromUrl("parallel"));
+oneClickSheetSerialButton.addEventListener("click", () => startOneClickFromSheet("serial"));
+oneClickSheetParallelButton.addEventListener("click", () => startOneClickFromSheet("parallel"));
 
 pipelineStopButton.addEventListener("click", () => {
   requestStop("正在暫停流程…");
