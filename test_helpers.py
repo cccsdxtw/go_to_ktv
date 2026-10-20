@@ -329,20 +329,15 @@ class OneClickPipelineTests(unittest.TestCase):
         self.assertIn("function requestPause()", html)
         self.assertIn("function requestResume()", html)
         self.assertIn("function waitIfPaused()", html)
-        self.assertIn("function confirmLeavePaused(", html)
-        self.assertIn("function allowWorkOrLeavePause(", html)
-        self.assertIn("結束這次", html)
-        self.assertIn("維持暫停", html)
-        self.assertNotIn("放棄這次，改做", html)
-        confirm = html.split("async function confirmLeavePaused", 1)[1].split("async function allowWorkOrLeavePause", 1)[0]
-        self.assertIn('value: "resume"', confirm)
-        self.assertIn('value: "stop"', confirm)
-        self.assertIn("return false", confirm)
-        self.assertIn("unlockPausedActionButtons", html)
+        self.assertNotIn("function confirmLeavePaused(", html)
+        self.assertNotIn("unlockPausedActionButtons", html)
+        self.assertNotIn("allowWorkOrLeavePause", html)
         self.assertIn('pipelinePaused ? "繼續" : "暫停"', html)
         pause = html.split("function requestPause()", 1)[1].split("function requestResume()", 1)[0]
         self.assertNotIn("pipelineAbort.abort()", pause)
-        self.assertIn("pipelineAbort.abort()", html.split("function requestStop", 1)[1].split("async function confirmLeavePaused", 1)[0])
+        self.assertNotIn("unlockPausedActionButtons", pause)
+        self.assertIn("youtubeSearchButton.disabled = busy", html)
+        self.assertIn("pipelineAbort.abort()", html.split("function requestStop", 1)[1].split("copyYoutubeButton", 1)[0])
         search = html.split("async function searchYoutubeTargets", 1)[1].split("youtubeSearchButton.addEventListener", 1)[0]
         send = html.split("async function sendElitesandTargets", 1)[1].split("sendElitesandButton.addEventListener", 1)[0]
         self.assertIn("await waitIfPaused()", search)
