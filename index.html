@@ -208,9 +208,29 @@
   }
   button.busy { box-shadow: 0 0 0 2px rgba(255, 138, 61, 0.35); }
   input[type="file"] { display: none; }
-  .status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
+  .status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 1.4em;
+    margin: 8px 0 0;
+    color: var(--muted);
+  }
   .flow-bar .status { margin: 8px 0 0; font-size: 13px; line-height: 1.45; }
   .status.error { color: var(--danger); }
+  .status-spin {
+    width: 0.9em;
+    height: 0.9em;
+    border: 2px solid rgba(255, 138, 61, 0.28);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    flex: 0 0 auto;
+    animation: status-spin 0.7s linear infinite;
+  }
+  @keyframes status-spin {
+    to { transform: rotate(360deg); }
+  }
   .flow-bar {
     background: #161922;
     border-bottom: 1px solid var(--line);
@@ -235,6 +255,12 @@
     padding: 0;
     list-style: none;
     flex: 1 1 16em;
+  }
+  .flow-row .conc-field {
+    margin-top: 4px;
+    flex: 0 0 auto;
+    color: var(--text);
+    white-space: nowrap;
   }
   .flow-pause {
     margin-top: 4px;
@@ -332,8 +358,7 @@
   .action-row.zone-check .row-label,
   .action-row.zone-check button,
   .action-stack.zone-check .row-label,
-  .action-stack.zone-check button,
-  .action-stack.zone-check .conc-field {
+  .action-stack.zone-check button {
     color: var(--flow-check-text);
   }
   .action-row.zone-check button.primary,
@@ -358,7 +383,8 @@
     font-size: 12px;
     font-weight: 650;
   }
-  .conc-field select {
+  .conc-field input {
+    width: 5.5em;
     background: #151821;
     color: inherit;
     border: 1px solid var(--flow-check-line);
@@ -366,12 +392,15 @@
     padding: 6px 8px;
     font: inherit;
   }
+  .conc-risk-wrap {
+    width: min(1100px, calc(100% - 32px));
+    margin: 8px auto 0;
+  }
   .conc-risk {
     margin: 0;
     font-size: 12px;
     line-height: 1.5;
-    max-width: 62em;
-    opacity: 0.9;
+    color: var(--muted);
   }
   .action-row.zone-yt { background: var(--flow-yt-bg); border-color: var(--flow-yt-line); }
   .action-row.zone-yt .row-label,
@@ -729,15 +758,21 @@
         <small class="flow-hint" data-flow-hint="done">還沒</small>
       </li>
     </ol>
+    <label class="conc-field" for="send-concurrency">同時下載
+      <input id="send-concurrency" type="number" min="1" step="1" value="1" inputmode="numeric">
+    </label>
     <button class="ghost pause flow-pause" id="pipeline-stop" type="button" disabled>暫停</button>
     </div>
     <p class="status" id="status" role="status"></p>
   </div>
 </div>
 </div>
+<div class="conc-risk-wrap">
+  <p class="conc-risk">同時下載建議 1，每次打開都是 1。要填 500 也可以。Elitesand 沒保證能同時收多首；調高可能搶資源、掛清單順序亂、重複或失敗。</p>
+</div>
 <header>
-  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.8</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。流程框可選同時下載幾首，每次打開都是 1。暫停後同一顆會變成「繼續」。流程進行中（含暫停）不能按抓取、搜尋、送出或另一個一鍵開始，只留上方那顆。</p>
+  <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.9</span></h1>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。同時下載在流程圖和暫停中間，建議 1，每次打開都是 1，要填多少都可以。暫停後同一顆會變成「繼續」。流程進行中（含暫停）不能按抓取、搜尋、送出或另一個一鍵開始。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -783,16 +818,7 @@
             <button class="primary" id="one-click-serial" type="button">一鍵開始(順序)</button>
             <button class="primary" id="one-click-parallel" type="button">一鍵開始(並行)</button>
             <button class="ghost" id="check-elitesand" type="button">確定Elitesand歌單</button>
-            <label class="conc-field" for="send-concurrency">同時下載
-              <select id="send-concurrency">
-                <option value="1" selected>1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-              </select>
-            </label>
           </div>
-          <p class="conc-risk">同時下載預設 1，每次打開都是 1。Elitesand 沒保證能同時收多首；調高可能搶資源、掛清單順序亂、重複或失敗。</p>
         </div>
         <div class="action-row">
           <span class="row-label">下載區</span>
@@ -841,10 +867,10 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載預設 1（每次打開都是 1）；調高是冒險，Elitesand 沒保證吃得下。暫停在最上方，按「繼續」接著做。流程進行中這些流程鈕會打灰，避免點下去邏輯亂掉。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載在最上方流程圖旁邊，建議 1（每次打開都是 1），要填 500 也可以。調高是冒險，Elitesand 沒保證吃得下。暫停在最上方，按「繼續」接著做。流程進行中流程鈕會打灰，同時下載仍可改。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
   </section>
 </main>
-<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.8。</footer>
+<footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.9。</footer>
 <div class="dialog-overlay" id="app-dialog" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
     <h2 id="app-dialog-title"></h2>
@@ -916,8 +942,27 @@ let current = null;
 const selected = new Set();
 
 function setStatus(message, isError) {
-  statusEl.textContent = message;
+  statusEl.textContent = message || "";
   statusEl.classList.toggle("error", Boolean(isError));
+  updateStatusSpin();
+}
+
+function updateStatusSpin() {
+  if (!statusEl) return;
+  const existing = statusEl.querySelector(".status-spin");
+  const spinning = Boolean(statusEl.textContent)
+    && !statusEl.classList.contains("error")
+    && !pipelinePaused
+    && anyWorkRunning();
+  statusEl.classList.toggle("is-working", spinning);
+  if (spinning && !existing) {
+    const spin = document.createElement("span");
+    spin.className = "status-spin";
+    spin.setAttribute("aria-hidden", "true");
+    statusEl.appendChild(spin);
+  } else if (!spinning && existing) {
+    existing.remove();
+  }
 }
 
 const FLOW_STEPS = ["fetch", "check", "youtube", "import", "done"];
@@ -982,6 +1027,7 @@ function syncStopButtons() {
     pipelineStopButton,
     pipelineControlsBusy || pipelineRunning || youtubeSearching || elitesandSending || audioDownloading
   );
+  updateStatusSpin();
 }
 
 async function detectServer() {
@@ -2505,36 +2551,50 @@ sendElitesandButton.addEventListener("click", async () => {
 
 function sendConcurrency() {
   const n = parseInt(sendConcurrencySelect && sendConcurrencySelect.value, 10);
-  if (!(n >= 1)) return 1;
-  return Math.min(4, n);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.floor(n);
 }
 
 function createSendPool() {
-  const conc = sendConcurrency();
-  const workers = Array.from({ length: conc }, () => Promise.resolve());
-  let next = 0;
   let inFlight = 0;
-  return {
-    conc,
-    enqueue(job) {
-      const slot = next % workers.length;
-      next += 1;
-      workers[slot] = workers[slot].then(async () => {
-        await waitIfPaused();
-        if (pipelineWasStopped()) return;
-        inFlight += 1;
-        elitesandSending = true;
-        syncStopButtons();
-        try {
-          await job();
-        } finally {
+  const queue = [];
+  const idleWaiters = [];
+  function pump() {
+    const conc = sendConcurrency();
+    while (queue.length && inFlight < conc) {
+      const job = queue.shift();
+      inFlight += 1;
+      elitesandSending = true;
+      syncStopButtons();
+      Promise.resolve()
+        .then(() => waitIfPaused())
+        .then(() => {
+          if (pipelineWasStopped()) return;
+          return job();
+        })
+        .finally(() => {
           inFlight -= 1;
-          if (!inFlight) syncStopButtons();
-        }
-      });
+          if (!inFlight && !queue.length) {
+            elitesandSending = false;
+            const waiters = idleWaiters.splice(0, idleWaiters.length);
+            waiters.forEach((fn) => fn());
+          }
+          syncStopButtons();
+          pump();
+        });
+    }
+  }
+  return {
+    get conc() {
+      return sendConcurrency();
+    },
+    enqueue(job) {
+      queue.push(job);
+      pump();
     },
     wait() {
-      return Promise.all(workers);
+      if (!inFlight && !queue.length) return Promise.resolve();
+      return new Promise((resolve) => { idleWaiters.push(resolve); });
     }
   };
 }
@@ -2736,7 +2796,6 @@ function setPipelineBusy(busy, label) {
   youtubeSearchButton.disabled = busy;
   sendElitesandButton.disabled = busy;
   if (downloadAudioButton) downloadAudioButton.disabled = busy;
-  if (sendConcurrencySelect) sendConcurrencySelect.disabled = busy;
   if (!busy) {
     pipelinePaused = false;
     flushPauseWaiters();
