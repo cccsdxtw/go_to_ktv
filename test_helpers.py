@@ -276,8 +276,11 @@ class ActionGroupLayoutTests(unittest.TestCase):
         self.assertIn("一鍵開始(順序)", html)
         self.assertIn("一鍵開始(並行)", html)
         self.assertIn('id="send-concurrency"', html)
-        self.assertIn('<option value="1" selected>1</option>', html)
-        self.assertIn("同時下載預設 1，每次打開都是 1", html)
+        self.assertIn('type="number"', html)
+        self.assertIn('value="1"', html)
+        self.assertNotIn("<select id=\"send-concurrency\"", html)
+        self.assertIn("同時下載建議 1，每次打開都是 1", html)
+        self.assertIn("要填 500 也可以", html)
         self.assertIn("Elitesand 沒保證能同時收多首", html)
         self.assertIn('sendConcurrencySelect.value = "1"', html)
         self.assertNotIn("go_to_ktv_send_conc", html)
@@ -320,6 +323,9 @@ class OneClickPipelineTests(unittest.TestCase):
         self.assertIn("runSerialSearchThenSend", from_url)
         pool = html.split("function createSendPool()", 1)[1].split("function createOverlapEngine()", 1)[0]
         self.assertIn("sendConcurrency()", pool)
+        self.assertNotIn("Math.min(4", pool)
+        send_fn = html.split("function sendConcurrency()", 1)[1].split("function createSendPool()", 1)[0]
+        self.assertNotIn("Math.min(4", send_fn)
         send = html.split("async function sendElitesandTargets", 1)[1].split("sendElitesandButton.addEventListener", 1)[0]
         self.assertIn("createSendPool()", send)
 
@@ -411,6 +417,7 @@ class StickyFlowChartTests(unittest.TestCase):
         self.assertLess(html.index('id="send-concurrency"'), html.index('id="pipeline-stop"'))
         self.assertLess(chart_at, html.index('id="pipeline-stop"'))
         self.assertLess(html.index('id="pipeline-stop"'), status_at)
+        self.assertLess(status_at, html.index('class="conc-risk"'))
         busy = html.split("function setPipelineBusy", 1)[1].split("function oneClickSummary", 1)[0]
         self.assertNotIn("sendConcurrencySelect.disabled", busy)
         self.assertLess(chart_at, status_at)

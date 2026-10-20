@@ -242,11 +242,6 @@
     color: var(--text);
     white-space: nowrap;
   }
-  .flow-inner .conc-risk {
-    font-size: 11px;
-    margin: 4px 0 0;
-    max-width: none;
-  }
   .flow-pause {
     margin-top: 4px;
     background: #2a303c;
@@ -368,7 +363,8 @@
     font-size: 12px;
     font-weight: 650;
   }
-  .conc-field select {
+  .conc-field input {
+    width: 5.5em;
     background: #151821;
     color: inherit;
     border: 1px solid var(--flow-check-line);
@@ -376,12 +372,15 @@
     padding: 6px 8px;
     font: inherit;
   }
+  .conc-risk-wrap {
+    width: min(1100px, calc(100% - 32px));
+    margin: 8px auto 0;
+  }
   .conc-risk {
     margin: 0;
     font-size: 12px;
     line-height: 1.5;
-    max-width: 62em;
-    opacity: 0.9;
+    color: var(--muted);
   }
   .action-row.zone-yt { background: var(--flow-yt-bg); border-color: var(--flow-yt-line); }
   .action-row.zone-yt .row-label,
@@ -739,24 +738,21 @@
         <small class="flow-hint" data-flow-hint="done">還沒</small>
       </li>
     </ol>
-    <label class="conc-field" for="send-concurrency" title="Elitesand 沒保證能同時收多首；調高可能搶資源、掛清單順序亂、重複或失敗。">同時下載
-      <select id="send-concurrency">
-        <option value="1" selected>1</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-      </select>
+    <label class="conc-field" for="send-concurrency">同時下載
+      <input id="send-concurrency" type="number" min="1" step="1" value="1" inputmode="numeric">
     </label>
     <button class="ghost pause flow-pause" id="pipeline-stop" type="button" disabled>暫停</button>
     </div>
-    <p class="conc-risk">同時下載預設 1，每次打開都是 1。Elitesand 沒保證能同時收多首；調高可能搶資源、掛清單順序亂、重複或失敗。</p>
     <p class="status" id="status" role="status"></p>
   </div>
 </div>
 </div>
+<div class="conc-risk-wrap">
+  <p class="conc-risk">同時下載建議 1，每次打開都是 1。要填 500 也可以。Elitesand 沒保證能同時收多首；調高可能搶資源、掛清單順序亂、重複或失敗。</p>
+</div>
 <header>
   <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.9</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。同時下載在流程圖和暫停中間，一鍵開始時也能改；每次打開都是 1。暫停後同一顆會變成「繼續」。流程進行中（含暫停）不能按抓取、搜尋、送出或另一個一鍵開始。</p>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。同時下載在流程圖和暫停中間，建議 1，每次打開都是 1，要填多少都可以。暫停後同一顆會變成「繼續」。流程進行中（含暫停）不能按抓取、搜尋、送出或另一個一鍵開始。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -851,7 +847,7 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載在最上方流程圖旁邊，預設 1（每次打開都是 1）；調高是冒險，Elitesand 沒保證吃得下。暫停在最上方，按「繼續」接著做。流程進行中流程鈕會打灰，同時下載仍可改。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載在最上方流程圖旁邊，建議 1（每次打開都是 1），要填 500 也可以。調高是冒險，Elitesand 沒保證吃得下。暫停在最上方，按「繼續」接著做。流程進行中流程鈕會打灰，同時下載仍可改。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
   </section>
 </main>
 <footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.9。</footer>
@@ -2515,37 +2511,50 @@ sendElitesandButton.addEventListener("click", async () => {
 
 function sendConcurrency() {
   const n = parseInt(sendConcurrencySelect && sendConcurrencySelect.value, 10);
-  if (!(n >= 1)) return 1;
-  return Math.min(4, n);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.floor(n);
 }
 
 function createSendPool() {
-  const workers = Array.from({ length: 4 }, () => Promise.resolve());
-  let next = 0;
   let inFlight = 0;
+  const queue = [];
+  const idleWaiters = [];
+  function pump() {
+    const conc = sendConcurrency();
+    while (queue.length && inFlight < conc) {
+      const job = queue.shift();
+      inFlight += 1;
+      elitesandSending = true;
+      syncStopButtons();
+      Promise.resolve()
+        .then(() => waitIfPaused())
+        .then(() => {
+          if (pipelineWasStopped()) return;
+          return job();
+        })
+        .finally(() => {
+          inFlight -= 1;
+          if (!inFlight && !queue.length) {
+            elitesandSending = false;
+            const waiters = idleWaiters.splice(0, idleWaiters.length);
+            waiters.forEach((fn) => fn());
+          }
+          syncStopButtons();
+          pump();
+        });
+    }
+  }
   return {
     get conc() {
       return sendConcurrency();
     },
     enqueue(job) {
-      const slot = next % sendConcurrency();
-      next += 1;
-      workers[slot] = workers[slot].then(async () => {
-        await waitIfPaused();
-        if (pipelineWasStopped()) return;
-        inFlight += 1;
-        elitesandSending = true;
-        syncStopButtons();
-        try {
-          await job();
-        } finally {
-          inFlight -= 1;
-          if (!inFlight) syncStopButtons();
-        }
-      });
+      queue.push(job);
+      pump();
     },
     wait() {
-      return Promise.all(workers);
+      if (!inFlight && !queue.length) return Promise.resolve();
+      return new Promise((resolve) => { idleWaiters.push(resolve); });
     }
   };
 }
