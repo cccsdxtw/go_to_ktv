@@ -241,7 +241,7 @@ class DownloadPipelineTests(unittest.TestCase):
 
 class HealthPayloadTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "1.0.8")
+        self.assertEqual(server.APP_VERSION, "1.0.9")
 
 
 class ActionGroupLayoutTests(unittest.TestCase):
@@ -407,8 +407,12 @@ class StickyFlowChartTests(unittest.TestCase):
         self.assertLess(html.index("匯入Elitesand下載"), html.index("flow-name\">完成"))
         status_at = html.index('id="status"')
         chart_at = html.index('id="flow-chart"')
+        self.assertLess(chart_at, html.index('id="send-concurrency"'))
+        self.assertLess(html.index('id="send-concurrency"'), html.index('id="pipeline-stop"'))
         self.assertLess(chart_at, html.index('id="pipeline-stop"'))
         self.assertLess(html.index('id="pipeline-stop"'), status_at)
+        busy = html.split("function setPipelineBusy", 1)[1].split("function oneClickSummary", 1)[0]
+        self.assertNotIn("sendConcurrencySelect.disabled", busy)
         self.assertLess(chart_at, status_at)
         self.assertLess(status_at, html.index('id="result"'))
         self.assertIn("function setFlowStages(", html)
