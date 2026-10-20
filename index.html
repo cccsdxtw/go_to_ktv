@@ -733,7 +733,7 @@
 </div>
 <header>
   <h1>歌單轉入 <span style="font-size:14px;color:var(--muted);font-weight:500">v1.0.8</span></h1>
-  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。流程框可選同時下載幾首，每次打開都是 1。暫停後同一顆會變成「繼續」，接著做還沒做完的。</p>
+  <p class="lead">雙擊 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac）就會自動打開。可貼 StreamerSonglist、YouTube、KKBOX 或 Spotify 歌單。「一鍵開始(順序)」是抓完再搜再送；「一鍵開始(並行)」會邊抓邊搜邊送。流程框可選同時下載幾首，每次打開都是 1。暫停後同一顆會變成「繼續」。暫停時若去按搜尋、送出或另一個一鍵開始，會先問要不要放棄這次。</p>
   <p class="hint">用完請按上方紅色「結束程式」，或關掉黑色視窗。這樣 <code>http://127.0.0.1:8765</code> 才會讓出來，下次再開就不必把舊的頂掉。<strong>只關瀏覽器分頁是不夠的</strong>，位置還會被佔著。</p>
 </header>
 <div class="banner" id="offline-banner">你現在是直接打開網頁檔，網址抓歌與 YouTube 搜尋會失敗。請改雙擊同資料夾的 <code>開始.bat</code>（Windows）或 <code>開始.command</code>（Mac），它會自動啟動並打開正確頁面。CSV／試算表轉成 Elitesand json 仍可在這裡做。</div>
@@ -837,7 +837,7 @@
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載預設 1（每次打開都是 1）；調高是冒險，Elitesand 沒保證吃得下。暫停在最上方，按「繼續」接著做。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
+    <p class="import-note"><strong>請走 Elitesand 自己的下載。</strong>「順序」是舊流程：抓完、對庫、搜完、再送。「並行」是邊抓邊搜邊送。同時下載預設 1（每次打開都是 1）；調高是冒險，Elitesand 沒保證吃得下。暫停在最上方，按「繼續」接著做。暫停時去按搜尋／送出／另一個一鍵開始，會問你要不要放棄這次。失敗可改歌名／歌手後重試。有設 PIN 才要填。</p>
   </section>
 </main>
 <footer>請用「開始」啟動，不要只雙擊 index.html。網址來源：StreamerSonglist、YouTube、KKBOX、Spotify。送到 Elitesand 會呼叫本機 127.0.0.1:3000。用完按上方紅色「結束程式」讓出 8765。版本 v1.0.8。</footer>
@@ -966,6 +966,20 @@ function anyWorkRunning() {
   return pipelineRunning || youtubeSearching || elitesandSending || audioDownloading || pipelineControlsBusy;
 }
 
+let pipelineIdleWaiters = [];
+
+function noteWorkMaybeIdle() {
+  if (anyWorkRunning()) return;
+  const waiters = pipelineIdleWaiters;
+  pipelineIdleWaiters = [];
+  for (const fn of waiters) fn();
+}
+
+function waitUntilPipelineIdle() {
+  if (!anyWorkRunning()) return Promise.resolve();
+  return new Promise((resolve) => { pipelineIdleWaiters.push(resolve); });
+}
+
 function setStopEnabled(button, enabled) {
   if (!button) return;
   button.disabled = !enabled;
@@ -1020,6 +1034,17 @@ function setButtonBusy(button, busy, label) {
   button.classList.toggle("busy", Boolean(busy));
   button.setAttribute("aria-busy", busy ? "true" : "false");
   button.textContent = busy && label ? label : button.dataset.idleLabel;
+}
+
+function unlockPausedActionButtons() {
+  for (const button of oneClickButtons) setButtonBusy(button, false);
+  setButtonBusy(checkElitesandButton, false);
+  if (fetchButton) fetchButton.disabled = false;
+  if (sheetParse) sheetParse.disabled = false;
+  setButtonBusy(youtubeSearchButton, false);
+  setButtonBusy(sendElitesandButton, false);
+  setButtonBusy(downloadAudioButton, false);
+  if (sendConcurrencySelect) sendConcurrencySelect.disabled = false;
 }
 
 function flashButton(button, label, ms) {
@@ -1129,7 +1154,7 @@ async function loadPlaylistFromUrl(url) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (anyWorkRunning()) return;
+  if (!(await allowWorkOrLeavePause("抓取歌單"))) return;
   const url = urlInput.value.trim();
   setFlowStage("fetch");
   setFlowHint("fetch", "正在抓…");
@@ -1145,7 +1170,7 @@ form.addEventListener("submit", async (event) => {
 });
 
 sheetFile.addEventListener("change", async () => {
-  if (anyWorkRunning()) {
+  if (!(await allowWorkOrLeavePause("轉成歌單"))) {
     sheetFile.value = "";
     return;
   }
@@ -1162,8 +1187,8 @@ sheetFile.addEventListener("change", async () => {
   }
 });
 
-sheetParse.addEventListener("click", () => {
-  if (anyWorkRunning()) return;
+sheetParse.addEventListener("click", async () => {
+  if (!(await allowWorkOrLeavePause("轉成歌單"))) return;
   try {
     applySheetText(sheetText.value, "sheet-import");
     flashButton(sheetParse, "已轉成歌單");
@@ -1630,8 +1655,8 @@ function renderFailPanel() {
       `YouTube 搜尋失敗 ${yt.length} 首（先改歌名／歌手再重試）`,
       yt,
       `重試這 ${yt.length} 首`,
-      () => {
-        if (anyWorkRunning()) return;
+      async () => {
+        if (!(await allowWorkOrLeavePause("搜尋 YouTube"))) return;
         searchYoutubeTargets(ytFailedSongs());
       }
     ));
@@ -1641,8 +1666,8 @@ function renderFailPanel() {
       `送到 Elitesand 失敗 ${sent.length} 首（點歌名跳到該列）`,
       sent,
       `重試這 ${sent.length} 首`,
-      () => {
-        if (anyWorkRunning()) return;
+      async () => {
+        if (!(await allowWorkOrLeavePause("送到 Elitesand 下載"))) return;
         sendElitesandTargets(sendFailedSongs());
       }
     ));
@@ -1879,14 +1904,16 @@ function editableCell(song, field) {
   input.setAttribute("aria-label", field === "title" ? "歌名" : "歌手");
   input.autocomplete = "off";
   input.spellcheck = false;
-  input.addEventListener("keydown", (event) => {
+  input.addEventListener("keydown", async (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     commitSongField(song, field, input.value);
     input.value = song[field] || "";
     input.blur();
-    if (!song.youtubeUrl) searchYoutubeTargets([song]);
-    else render();
+    if (!song.youtubeUrl) {
+      if (!(await allowWorkOrLeavePause("搜尋 YouTube"))) return;
+      searchYoutubeTargets([song]);
+    } else render();
   });
   input.addEventListener("change", () => {
     const changed = commitSongField(song, field, input.value);
@@ -2079,11 +2106,13 @@ async function searchYoutubeTargets(targets, options) {
     }
     syncStopButtons();
     if (!fromPipeline) refreshFlowStage();
+    noteWorkMaybeIdle();
   }
 }
 
 youtubeSearchButton.addEventListener("click", async () => {
-  if (!current || anyWorkRunning()) return;
+  if (!current) return;
+  if (!(await allowWorkOrLeavePause("搜尋 YouTube"))) return;
   await markExistingElitesandSongs();
   const failed = visibleSongs().filter(isYtFail);
   const missing = visibleSongs().filter((song) => !song.youtubeUrl && !song.elitesandSkipped);
@@ -2143,13 +2172,15 @@ function requestPause() {
   if (pipelinePaused || pipelineWasStopped() || !anyWorkRunning()) return;
   pipelinePaused = true;
   updatePauseButton();
-  setStatus("已暫停。正在進行的那一首會做完，按「繼續」接著做。", false);
+  unlockPausedActionButtons();
+  setStatus("已暫停。正在進行的那一首會做完，按「繼續」接著做。暫停時若改按搜尋或送出，會先問要不要放棄這次。", false);
 }
 
 function requestResume() {
   if (!pipelinePaused) return;
   pipelinePaused = false;
   updatePauseButton();
+  setPipelineBusy(true, "接著做…");
   setStatus("接著做…", false);
   flushPauseWaiters();
 }
@@ -2164,6 +2195,29 @@ function requestStop(message) {
   try { pipelineAbort.abort(); } catch (_) { /* ignore */ }
   flushPauseWaiters();
   setStatus(message || "正在停止…", false);
+}
+
+async function confirmLeavePaused(actionLabel) {
+  const choice = await showAppDialog(
+    `一鍵開始還暫停著。要「${actionLabel}」，得先放棄這次，不能一邊暫停一邊另做。`,
+    [
+      { label: `放棄這次，改做${actionLabel}`, value: "abandon", primary: true },
+      { label: "維持暫停", value: "stay" }
+    ]
+  );
+  if (choice !== "abandon") {
+    setStatus("還在暫停。要接著做請按「繼續」。", false);
+    return false;
+  }
+  requestStop("已放棄這次一鍵開始。");
+  await waitUntilPipelineIdle();
+  return true;
+}
+
+async function allowWorkOrLeavePause(actionLabel) {
+  if (pipelinePaused) return confirmLeavePaused(actionLabel);
+  if (anyWorkRunning()) return false;
+  return true;
 }
 
 copyYoutubeButton.addEventListener("click", async () => {
@@ -2203,7 +2257,8 @@ async function downloadOneAudio(song) {
 }
 
 downloadAudioButton.addEventListener("click", async () => {
-  if (!current || anyWorkRunning()) return;
+  if (!current) return;
+  if (!(await allowWorkOrLeavePause("一次下載全部音檔"))) return;
   const targets = visibleSongs().filter((song) => song.youtubeUrl && !song.audioFile);
   if (!targets.length) {
     const missingSearch = visibleSongs().filter((song) => !song.youtubeUrl).length;
@@ -2245,6 +2300,7 @@ downloadAudioButton.addEventListener("click", async () => {
     audioDownloading = false;
     setButtonBusy(downloadAudioButton, false);
     syncStopButtons();
+    noteWorkMaybeIdle();
   }
 });
 
@@ -2464,11 +2520,13 @@ async function sendElitesandTargets(targets, options) {
     syncStopButtons();
     if (!fromPipeline) refreshFlowStage();
     refreshElitesandStatus();
+    noteWorkMaybeIdle();
   }
 }
 
 sendElitesandButton.addEventListener("click", async () => {
-  if (!current || anyWorkRunning()) return;
+  if (!current) return;
+  if (!(await allowWorkOrLeavePause("送到 Elitesand 下載"))) return;
   reclaimFakeSends();
   await markExistingElitesandSongs();
   const failed = failFilter === "es" ? sendFailedSongs() : visibleSongs().filter(isSendFail);
@@ -2726,6 +2784,7 @@ function setPipelineBusy(busy, label) {
     updatePauseButton();
   }
   syncStopButtons();
+  noteWorkMaybeIdle();
 }
 
 function oneClickSummary(skipped, sendResult) {
@@ -2827,15 +2886,18 @@ async function runOneClickPipeline(mode) {
   }
 }
 
-oneClickSerialButton.addEventListener("click", () => {
+oneClickSerialButton.addEventListener("click", async () => {
+  if (!(await allowWorkOrLeavePause("一鍵開始(順序)"))) return;
   runOneClickPipeline("serial");
 });
-oneClickParallelButton.addEventListener("click", () => {
+oneClickParallelButton.addEventListener("click", async () => {
+  if (!(await allowWorkOrLeavePause("一鍵開始(並行)"))) return;
   runOneClickPipeline("parallel");
 });
 
 checkElitesandButton.addEventListener("click", async () => {
-  if (!current || anyWorkRunning()) return;
+  if (!current) return;
+  if (!(await allowWorkOrLeavePause("確定Elitesand歌單"))) return;
   clearStopFlags();
   setPipelineBusy(true, "正在對歌單…");
   try {
@@ -2974,7 +3036,8 @@ async function runOneClickFromUrl(url, mode) {
 }
 
 async function startOneClickFromUrl(mode) {
-  if (anyWorkRunning()) return;
+  const label = mode === "parallel" ? "一鍵開始(並行)" : "一鍵開始(順序)";
+  if (!(await allowWorkOrLeavePause(label))) return;
   const url = urlInput.value.trim();
   if (!url) {
     setStatus("請先貼上歌單網址。", true);
@@ -2985,7 +3048,8 @@ async function startOneClickFromUrl(mode) {
 }
 
 async function startOneClickFromSheet(mode) {
-  if (anyWorkRunning()) return;
+  const label = mode === "parallel" ? "一鍵開始(並行)" : "一鍵開始(順序)";
+  if (!(await allowWorkOrLeavePause(label))) return;
   try {
     applySheetText(sheetText.value, "sheet-import");
   } catch (error) {
