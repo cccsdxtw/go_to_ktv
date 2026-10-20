@@ -208,9 +208,29 @@
   }
   button.busy { box-shadow: 0 0 0 2px rgba(255, 138, 61, 0.35); }
   input[type="file"] { display: none; }
-  .status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
+  .status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 1.4em;
+    margin: 8px 0 0;
+    color: var(--muted);
+  }
   .flow-bar .status { margin: 8px 0 0; font-size: 13px; line-height: 1.45; }
   .status.error { color: var(--danger); }
+  .status-spin {
+    width: 0.9em;
+    height: 0.9em;
+    border: 2px solid rgba(255, 138, 61, 0.28);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    flex: 0 0 auto;
+    animation: status-spin 0.7s linear infinite;
+  }
+  @keyframes status-spin {
+    to { transform: rotate(360deg); }
+  }
   .flow-bar {
     background: #161922;
     border-bottom: 1px solid var(--line);
@@ -922,8 +942,27 @@ let current = null;
 const selected = new Set();
 
 function setStatus(message, isError) {
-  statusEl.textContent = message;
+  statusEl.textContent = message || "";
   statusEl.classList.toggle("error", Boolean(isError));
+  updateStatusSpin();
+}
+
+function updateStatusSpin() {
+  if (!statusEl) return;
+  const existing = statusEl.querySelector(".status-spin");
+  const spinning = Boolean(statusEl.textContent)
+    && !statusEl.classList.contains("error")
+    && !pipelinePaused
+    && anyWorkRunning();
+  statusEl.classList.toggle("is-working", spinning);
+  if (spinning && !existing) {
+    const spin = document.createElement("span");
+    spin.className = "status-spin";
+    spin.setAttribute("aria-hidden", "true");
+    statusEl.appendChild(spin);
+  } else if (!spinning && existing) {
+    existing.remove();
+  }
 }
 
 const FLOW_STEPS = ["fetch", "check", "youtube", "import", "done"];
@@ -988,6 +1027,7 @@ function syncStopButtons() {
     pipelineStopButton,
     pipelineControlsBusy || pipelineRunning || youtubeSearching || elitesandSending || audioDownloading
   );
+  updateStatusSpin();
 }
 
 async function detectServer() {
